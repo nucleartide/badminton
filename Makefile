@@ -1,20 +1,14 @@
-# Build final cart by prepending PICO-8 header.
-# No minifier for now.
+# Build final cart.
 game.p8: game.lua
 	@echo 'pico-8 cartridge // http://www.pico-8.com' > game.p8
 	@echo 'version 16' >> game.p8
 	@echo '__lua__' >> game.p8
-	@echo 'export("game.html")' >> game.p8
-	@cat game.lua | tail -n +3 >> game.p8
+	@echo 'export("game.html")' >> game.p8 # TODO: Replace with script.
+	@cat game.lua | tail -n +3 >> game.p8 # Strip typescript-to-lua comments before appending.
 
 # Transpile TypeScript to Lua.
 game.lua: game.ts
 	@./node_modules/.bin/tstl -p tsconfig.json
-
-# Make TypeScript prettier.
-prettier:
-	@prettier --write --print-width 60 --no-semi game.ts
-.PHONY: prettier
 
 # Remove generated files.
 clean:
