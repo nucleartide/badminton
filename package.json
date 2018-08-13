@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "typescript-to-lua": "^0.7.0"
+  }
+}
