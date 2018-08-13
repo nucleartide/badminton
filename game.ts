@@ -1,5 +1,3 @@
-function _update() {
-}
+function _update() {}
 
-function _draw() {
-}
+function _draw() {}

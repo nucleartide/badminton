@@ -10,6 +10,11 @@ game.p8: game.lua
 game.lua: game.ts
 	@./node_modules/.bin/tstl -p tsconfig.json
 
+# Make TypeScript prettier.
+prettier:
+	@prettier --write --print-width 60 --no-semi game.ts
+.PHONY: prettier
+
 # Remove generated files.
 clean:
 	@rm game.p8
