@@ -4,3 +4,6 @@ node_modules/
 # Generated files.
 game.p8
 game.lua
+log.txt
+sdl_controllers.txt
+build.p8
