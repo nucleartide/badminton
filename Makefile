@@ -8,7 +8,7 @@ game.p8: game.lua
 
 # Transpile TypeScript to Lua.
 game.lua: game.ts
-	@./node_modules/.bin/tstl game.ts
+	@./node_modules/.bin/tstl -p tsconfig.json
 
 # Remove generated files.
 clean:
