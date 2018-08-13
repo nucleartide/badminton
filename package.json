@@ -8,5 +8,10 @@
   "prettier": {
     "printWidth": 60,
     "semi": false
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "pretty-quick --staged"
+    }
   }
 }
