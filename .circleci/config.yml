@@ -5,6 +5,9 @@ jobs:
       - image: circleci/node:8.11.3
     steps:
       - checkout
+      - install:
+          name: Install dependencies
+          command: npm install
       - run:
-          name: Ensure game builds.
+          name: Ensure game builds
           command: make game.p8
