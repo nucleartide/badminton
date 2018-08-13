@@ -14,7 +14,6 @@ game.lua: game.ts
 clean:
 	@rm -f game.p8
 	@rm -f game.lua
-	@rm -f build.p8
 	@rm -rf carts/
 .PHONY: clean
 
