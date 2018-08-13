@@ -4,6 +4,7 @@ game.p8: game.lua
 	@echo 'pico-8 cartridge // http://www.pico-8.com' > game.p8
 	@echo 'version 16' >> game.p8
 	@echo '__lua__' >> game.p8
+	@echo 'export("game.html")' >> game.p8
 	@cat game.lua | tail -n +3 >> game.p8
 
 # Transpile TypeScript to Lua.
@@ -17,25 +18,25 @@ prettier:
 
 # Remove generated files.
 clean:
-	@rm game.p8
-	@rm game.lua
-	@rm build.p8
+	@rm -f game.p8
+	@rm -f game.lua
+	@rm -f build.p8
+	@rm -rf carts/
 .PHONY: clean
 
 # Run generated cart.
 run: game.p8
-	@open -a PICO-8 --args -gif_scale 10 -home $(shell pwd) $(shell pwd)/game.p8
+	@open -a PICO-8 --args -gif_scale 10 -home $(shell pwd) -run $(shell pwd)/game.p8
 .PHONY: run
 
-# Generate build script.
-build.p8: game.p8
-	@echo 'pico-8 cartridge // http://www.pico-8.com' > build.p8
-	@echo 'version 16' >> build.p8
-	@echo '__lua__' >> build.p8
-	@echo 'load("$(shell pwd)/game.p8")' >> build.p8
-	@echo 'export("game.html")' >> build.p8
-
 # Build HTML export.
-html: build.p8
-	@open -a PICO-8 --args -x $(shell pwd)/build.p8 -home $(shell pwd)
+html: game.p8
+	@open -a PICO-8 --args -home $(shell pwd) -run $(shell pwd)/game.p8
+	@sleep 10
+	@pkill pico8
 .PHONY: html
+
+# Spin up a PICO-8 instance.
+pico:
+	@open -a PICO-8 --args -home $(shell pwd)
+.PHONY: pico

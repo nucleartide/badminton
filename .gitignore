@@ -7,3 +7,5 @@ game.lua
 log.txt
 sdl_controllers.txt
 build.p8
+config.txt
+carts/
