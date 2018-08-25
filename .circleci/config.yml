@@ -10,4 +10,4 @@ jobs:
           command: npm install
       - run:
           name: Ensure game builds
-          command: make game.p8
+          command: make carts/badminton.p8

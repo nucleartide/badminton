@@ -1,19 +1,3 @@
-declare function cls(c: col): void
-
-/**
- * game loop.
- */
-
-function _update() {}
-
-function _draw() {
-  cls(col.indigo)
-}
-
-/**
- * utils.
- */
-
 enum col {
   black,
   dark_blue,
@@ -31,4 +15,9 @@ enum col {
   indigo,
   pink,
   peach,
+}
+
+enum palette {
+  draw,
+  screen,
 }

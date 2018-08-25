@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "semicolon": [true, "never"],
+    "class-name": false,
+    "interface-name": [true, "never-prefix"],
+    "curly": [true, "ignore-same-line"],
+    "typedef": [true, "call-signature", "arrow-call-signature"],
+    "quotemark": [true, "single", "avoid-template", "avoid-escape"],
+    "one-variable-per-declaration": false
+  }
+}

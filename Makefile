@@ -1,35 +1,68 @@
+
+#
+# Continuous integration.
+#
+
 # Build final cart.
-game.p8: game.lua
-	@echo 'pico-8 cartridge // http://www.pico-8.com' > game.p8
-	@echo 'version 16' >> game.p8
-	@echo '__lua__' >> game.p8
-	@echo 'export("game.html")' >> game.p8 # TODO: Replace with script.
-	@cat game.lua | tail -n +3 >> game.p8 # Strip typescript-to-lua comments before appending.
+carts/badminton.p8: badminton/badminton.lua
+	@mkdir -p carts/
+	@echo 'pico-8 cartridge // http://www.pico-8.com' > carts/badminton.p8
+	@echo 'version 16' >> carts/badminton.p8
+	@echo '__lua__' >> carts/badminton.p8
+	@cat badminton/badminton.lua >> carts/badminton.p8
 
 # Transpile TypeScript to Lua.
-game.lua: game.ts
+badminton/badminton.lua: lint
 	@./node_modules/.bin/tstl -p tsconfig.json
+
+# Lint TypeScript.
+lint: badminton/badminton.ts
+	@./node_modules/.bin/tslint -c tslint.json badminton/badminton.ts
+.PHONY: lint
+
+# Run generated cart.
+run:
+	@open -na PICO-8 --args \
+		-gif_scale 10 \
+		-home $(shell pwd) \
+		-run $(shell pwd)/carts/badminton.p8
+.PHONY: run
+
+#
+# Continuous delivery.
+#
+
+# Build HTML export.
+badminton.html: carts/build.p8
+	@open -na PICO-8 --args \
+		-gif_scale 10 \
+		-home $(shell pwd) \
+		-run $(shell pwd)/carts/build.p8
+
+# Build builder cart.
+carts/build.p8: badminton/badminton.lua
+	@mkdir -p carts/
+	@echo 'pico-8 cartridge // http://www.pico-8.com' > carts/build.p8
+	@echo 'version 16' >> carts/build.p8
+	@echo '__lua__' >> carts/build.p8
+	@echo 'export("badminton.html")' >> carts/build.p8
+	@cat badminton/badminton.lua >> carts/build.p8
+
+#
+# Continuous deployment.
+#
+# No make targets yet!
+#
+
+#
+# Everything else.
+#
 
 # Remove generated files.
 clean:
-	@rm -f game.p8
-	@rm -f game.lua
-	@rm -rf carts/
+	@rm -f carts/badminton.p8
+	@rm -f badminton/badminton.lua
+	@rm -f carts/badminton.js
+	@rm -f carts/badminton.html
+	@rm -f carts/build.p8
 .PHONY: clean
-
-# Run generated cart.
-run: game.p8
-	@open -a PICO-8 --args -gif_scale 10 -home $(shell pwd) -run $(shell pwd)/game.p8
-.PHONY: run
-
-# Build HTML export.
-html: game.p8
-	@open -a PICO-8 --args -home $(shell pwd) -run $(shell pwd)/game.p8
-	@sleep 10
-	@pkill pico8
-.PHONY: html
-
-# Spin up a PICO-8 instance.
-pico:
-	@open -a PICO-8 --args -home $(shell pwd)
-.PHONY: pico
