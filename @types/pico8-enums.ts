@@ -21,3 +21,12 @@ enum palette {
   draw,
   screen,
 }
+
+enum button {
+  left,
+  right,
+  up,
+  down,
+  z,
+  x,
+}

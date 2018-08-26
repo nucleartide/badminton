@@ -98,14 +98,7 @@ declare function add<T>(t: Array<T>, v: T): Array<T>
  */
 
 // TODO: Document undocumented buttons in http://pico-8.wikia.com/wiki/Btn.
-declare enum button {
-  left,
-  right,
-  up,
-  down,
-  z,
-  x,
-}
+declare type button_index = 0 | 1 | 2 | 3 | 4 | 5
 
 declare type PlayerIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
 

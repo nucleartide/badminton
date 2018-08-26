@@ -5,3 +5,10 @@ node_modules/
 config.txt
 log.txt
 sdl_controllers.txt
+backup/
+
+# Build output.
+carts/badminton.p8
+carts/badminton.html
+carts/badminton.js
+badminton/badminton.lua
