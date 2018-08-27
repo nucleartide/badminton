@@ -667,7 +667,7 @@ function polygon_draw(p: polygon): void {
 //  vel: vec3
 //  acc: vec3
 //  scale: number
-//  desired_acc: number
+//  desired_speed: number
 //  pos: vec3
 //  cam: cam
 //}
@@ -680,7 +680,7 @@ function polygon_draw(p: polygon): void {
 //    vel: vec3(),
 //    acc: vec3(),
 //    scale: scale,
-//    desired_acc: 0.1 * scale, // meters per second
+//    desired_speed: 0.1 * scale, // meters per second
 //    pos: vec3(),
 //    cam: cam,
 //  }
@@ -692,21 +692,21 @@ function polygon_draw(p: polygon): void {
 //
 //  // handle input
 //  if (btn(button.left, p.player_num)) {
-//    p.acc.x = p.acc.x - p.desired_acc
+//    p.acc.x = p.acc.x - p.desired_speed
 //  }
 //  if (btn(button.right, p.player_num)) {
-//    p.acc.x = p.acc.x + p.desired_acc
+//    p.acc.x = p.acc.x + p.desired_speed
 //  }
 //  if (btn(button.up, p.player_num)) {
-//    p.acc.z = p.acc.z - p.desired_acc
+//    p.acc.z = p.acc.z - p.desired_speed
 //  }
 //  if (btn(button.down, p.player_num)) {
-//    p.acc.z = p.acc.z + p.desired_acc
+//    p.acc.z = p.acc.z + p.desired_speed
 //  }
 //
 //  // compute new acceleration
 //  vec3_normalize(p.acc)
-//  vec3_scale(p.acc, p.desired_acc)
+//  vec3_scale(p.acc, p.desired_speed)
 //
 //  // compute new velocity
 //  const t = 0.4
@@ -791,7 +791,7 @@ interface game {
   net_lines: Array<line>
   cam: cam
   court: polygon
-  // player: player
+  player: Player
 }
 
 function game(): game {
@@ -817,21 +817,21 @@ function game(): game {
     net_lines: net_lines,
     cam: c,
     court: p,
-    // player: player(c),
+    player: Player(c),
   }
 }
 
 function game_update(g: game): void {
   if (btn(button.right)) {
-    g.cam.y_angle += 0.01
+    // g.cam.y_angle += 0.01
   }
 
   if (btn(button.left)) {
-    g.cam.y_angle -= 0.01
+    // g.cam.y_angle -= 0.01
   }
 
   polygon_update(g.court)
-  // player_update(g.player)
+  Player_update(g.player)
 }
 
 function game_draw(g: game): void {
@@ -847,5 +847,99 @@ function game_draw(g: game): void {
     line_draw(l, g.cam)
   }
 
-  // player_draw(g.player)
+  Player_draw(g.player)
+}
+
+/**
+ * --> 5. player.
+ */
+
+interface Player {
+  scale: number
+  pos: vec3
+  vel: vec3
+  acc: vec3
+  desired_speed: number
+  screen_pos: vec3
+  cam: cam
+}
+
+function Player(c: cam): Player {
+  const scale = 6
+
+  return {
+    scale: scale,
+    pos: vec3(),
+    vel: vec3(),
+    acc: vec3(),
+    desired_speed: 10 * scale,
+    screen_pos: vec3(),
+    cam: c,
+  }
+}
+
+/*
+
+  we're implementing movement!
+
+  we need acceleration, to determine how
+  much to change the player's velocity
+
+  every frame, we'll update the position (`pos`)
+  using the player's velocity (`vel`)
+
+*/
+
+function Player_update(p: Player): void {
+  /**
+   * Compute acceleration.
+   *
+   * Acceleration here is like "desired velocity".
+   */
+
+  vec3_zero(p.acc)
+  if (btn(button.left)) p.acc.x -= p.desired_speed
+  if (btn(button.right)) p.acc.x += p.desired_speed
+  if (btn(button.up)) p.acc.z -= p.desired_speed
+  if (btn(button.down)) p.acc.z += p.desired_speed
+
+  /**
+   * Normalize & scale acceleration.
+   */
+
+  vec3_normalize(p.acc)
+  vec3_scale(p.acc, p.desired_speed)
+
+  /**
+   * Update velocity.
+   */
+
+  const t = 0.5
+  vec3_lerp(p.vel, p.vel, p.acc, t)
+  vec3_scale(p.vel, 1 / 60)
+
+  /**
+   * Update position.
+   */
+
+  vec3_add(p.pos, p.pos, p.vel)
+
+  /**
+   * Update screen position.
+   */
+
+  cam_project(p.cam, p.screen_pos, p.pos)
+}
+
+function Player_draw(p: Player): void {
+  const width = 10
+  const height = 25
+
+  rectfill(
+    round(p.screen_pos.x - width / 2),
+    round(p.screen_pos.y - height),
+    round(p.screen_pos.x + width / 2),
+    round(p.screen_pos.y),
+    col.orange
+  )
 }

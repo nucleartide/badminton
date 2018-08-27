@@ -38,6 +38,8 @@ declare type col_index =
 
 declare type palette_index = 0 | 1
 
+declare function pget(x: number, y: number): col_index
+declare function pset(x: number, y: number, c?: col_index): void
 declare function print<T>(str: T): void
 declare function print<T>(str: T, x: number, y: number, col?: col_index): void
 declare function cls(col?: col_index): void
