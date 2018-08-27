@@ -43,6 +43,13 @@ declare function pset(x: number, y: number, c?: col_index): void
 declare function print<T>(str: T): void
 declare function print<T>(str: T, x: number, y: number, col?: col_index): void
 declare function cls(col?: col_index): void
+declare function circ(x: number, y: number, r: number, col?: col_index): void
+declare function circfill(
+  x: number,
+  y: number,
+  r: number,
+  col?: col_index
+): void
 declare function line(
   x0: number,
   y0: number,

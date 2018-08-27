@@ -297,6 +297,12 @@ function vec3_zero(v: vec3): void {
   v.z = 0
 }
 
+function vec3_assign(a: vec3, b: vec3): void {
+  a.x = b.x
+  a.y = b.y
+  a.z = b.z
+}
+
 function mat3(): mat3 {
   return [vec3(), vec3(), vec3()]
 }
@@ -792,6 +798,7 @@ interface game {
   cam: cam
   court: polygon
   player: Player
+  ball: Ball
 }
 
 function game(): game {
@@ -817,21 +824,15 @@ function game(): game {
     net_lines: net_lines,
     cam: c,
     court: p,
-    player: Player(c),
+    player: player(c),
+    ball: ball(c),
   }
 }
 
 function game_update(g: game): void {
-  if (btn(button.right)) {
-    // g.cam.y_angle += 0.01
-  }
-
-  if (btn(button.left)) {
-    // g.cam.y_angle -= 0.01
-  }
-
   polygon_update(g.court)
-  Player_update(g.player)
+  player_update(g.player)
+  ball_update(g.ball)
 }
 
 function game_draw(g: game): void {
@@ -847,7 +848,8 @@ function game_draw(g: game): void {
     line_draw(l, g.cam)
   }
 
-  Player_draw(g.player)
+  player_draw(g.player)
+  ball_draw(g.ball)
 }
 
 /**
@@ -864,7 +866,7 @@ interface Player {
   cam: cam
 }
 
-function Player(c: cam): Player {
+function player(c: cam): Player {
   const scale = 6
 
   return {
@@ -890,7 +892,7 @@ function Player(c: cam): Player {
 
 */
 
-function Player_update(p: Player): void {
+function player_update(p: Player): void {
   /**
    * Compute acceleration.
    *
@@ -931,7 +933,7 @@ function Player_update(p: Player): void {
   cam_project(p.cam, p.screen_pos, p.pos)
 }
 
-function Player_draw(p: Player): void {
+function player_draw(p: Player): void {
   const width = 10
   const height = 25
 
@@ -942,4 +944,60 @@ function Player_draw(p: Player): void {
     round(p.screen_pos.y),
     col.orange
   )
+}
+
+/**
+ * --> 6. ball.
+ */
+
+interface Ball {
+  pos: vec3
+  vel: vec3
+  acc: vec3
+  screen_pos: vec3
+  cam: cam
+}
+
+function ball(c: cam): Ball {
+  const scale = 6
+
+  return {
+    pos: vec3(-2 * scale, 2 * scale, 0),
+    vel: vec3(0, 0, 0),
+    acc: vec3(0, -5 * scale, 0),
+    screen_pos: vec3(),
+    cam: c,
+  }
+}
+
+declare var ball_update: (b: Ball) => void
+{
+  const spare = vec3()
+  ball_update = (b: Ball): void => {
+    // compute change in velocity for this frame.
+    vec3_assign(spare, b.acc)
+    vec3_scale(spare, 1 / 60)
+
+    // apply change in velocity.
+    vec3_add(b.vel, b.vel, spare)
+
+    // compute change in position for this frame.
+    vec3_assign(spare, b.vel)
+    vec3_scale(spare, 1 / 60)
+
+    // apply change in position.
+    vec3_add(b.pos, b.pos, b.vel)
+
+    // bounds check.
+    if (b.pos.y < 0) {
+      b.pos.y = 0
+    }
+
+    // compute new screen position.
+    cam_project(b.cam, b.screen_pos, b.pos)
+  }
+}
+
+function ball_draw(b: Ball): void {
+  circfill(round(b.screen_pos.x), round(b.screen_pos.y), 1, col.green)
 }
