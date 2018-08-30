@@ -6,6 +6,7 @@ config.txt
 log.txt
 sdl_controllers.txt
 backup/
+*.p8l
 
 # Build output.
 carts/badminton.p8

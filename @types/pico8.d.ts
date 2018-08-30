@@ -4,6 +4,7 @@
 
 declare function assert<T>(cond: boolean, message?: T): void
 declare function stop<T>(message?: T): void
+declare function printh<T>(str: T, filename?: string, overwrite?: boolean): void
 
 /**
  * Program structure.
