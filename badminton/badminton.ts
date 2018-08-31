@@ -777,6 +777,7 @@ interface game {
   court: polygon
   player: Player
   ball: Ball
+  zero_vec: vec3
 }
 
 function game(): game {
@@ -799,14 +800,17 @@ function game(): game {
 
   const b = ball(c)
 
-  return {
+  const game_instance = {
     court_lines: court_lines,
     net_lines: net_lines,
     cam: c,
     court: p,
     player: player(c, b),
     ball: b,
+    zero_vec: vec3(),
   }
+
+  return game_instance
 }
 
 function game_update(g: game): void {
@@ -815,6 +819,8 @@ function game_update(g: game): void {
   ball_update(g.ball)
 }
 
+type DrawFunction = (g: game) => void
+const order: Array<[vec3, DrawFunction]> = []
 function game_draw(g: game): void {
   polygon_draw(g.court)
 
@@ -823,13 +829,53 @@ function game_draw(g: game): void {
     line_draw(l, g.cam)
   }
 
+  clear_order()
+  insert_into_order(g.zero_vec, game_draw_net)
+  insert_into_order(g.player.pos, game_draw_player)
+  insert_into_order(g.ball.pos, game_draw_ball)
+
+  for (let i = 0; i < order.length; i++) {
+    order[i][1](g)
+  }
+}
+
+function game_draw_net(g: game): void {
   for (let i = 0; i < g.net_lines.length; i++) {
     const l = g.net_lines[i]
     line_draw(l, g.cam)
   }
-
+}
+function game_draw_player(g: game): void {
   player_draw(g.player)
+}
+function game_draw_ball(g: game): void {
   ball_draw(g.ball)
+}
+
+function clear_order(): void {
+  for (let i = 0; i < order.length; i++) {
+    // @ts-ignore
+    order[i] = null
+  }
+}
+
+function insert_into_order(pos: vec3, draw_fn: (g: game) => void): void {
+  for (let i = 0; i < order.length; i++) {
+    const current = order[i]
+    if (pos.z < current[0].z) {
+      // move everything 1 over
+      for (let j = order.length - 1; j >= i; j--) {
+        order[j + 1] = order[j]
+      }
+
+      // then insert
+      // TODO: memory allocation, not super important though
+      order[i] = [pos, draw_fn]
+
+      return
+    }
+  }
+  order[order.length] = [pos, draw_fn]
 }
 
 /**
@@ -1017,6 +1063,9 @@ function player_draw(p: Player): void {
   const width = 10
   const height = 25
 
+  // draw shadow
+  circfill(round(p.screen_pos.x), round(p.screen_pos.y), 3, col.dark_blue)
+
   rectfill(
     round(p.screen_pos.x - width / 2),
     round(p.screen_pos.y - height),
@@ -1024,13 +1073,6 @@ function player_draw(p: Player): void {
     round(p.screen_pos.y),
     col.orange
   )
-
-  if (p.hit) {
-    print('hit')
-  }
-
-  //print(vec3_magnitude(p.spare))
-  //print(p.ball.pos.y > 0)
 }
 
 /**
@@ -1039,11 +1081,13 @@ function player_draw(p: Player): void {
 
 interface Ball {
   pos: vec3
+  shadow_pos: vec3
   vel: vec3
   vel60: vec3
   acc: vec3
   acc60: vec3
   screen_pos: vec3
+  screen_shadow_pos: vec3
   cam: cam
   is_kinematic: boolean
 }
@@ -1053,11 +1097,13 @@ function ball(c: cam): Ball {
 
   return {
     pos: vec3(0, 3 * meter, 5 * meter),
+    shadow_pos: vec3(),
     vel: vec3(0, 1 * meter, 0),
     vel60: vec3(),
     acc: vec3(0, -10 * meter, 0),
     acc60: vec3(),
     screen_pos: vec3(),
+    screen_shadow_pos: vec3(),
     cam: c,
     is_kinematic: false,
   }
@@ -1084,17 +1130,28 @@ declare var ball_update: (b: Ball) => void
     }
 
     // bounds check.
-    /*
     if (b.pos.y < 0) {
       b.pos.y = 0
     }
-    */
 
     // compute new screen position.
     cam_project(b.cam, b.screen_pos, b.pos)
+
+    // compute new screen position for shadow
+    vec3_assign(b.shadow_pos, b.pos)
+    b.shadow_pos.y = 0
+    cam_project(b.cam, b.screen_shadow_pos, b.shadow_pos)
   }
 }
 
 function ball_draw(b: Ball): void {
+  circfill(
+    round(b.screen_shadow_pos.x),
+    round(b.screen_shadow_pos.y),
+    1,
+    col.dark_blue
+  )
   circfill(round(b.screen_pos.x), round(b.screen_pos.y), 1, col.green)
+  //vec3_print(b.pos)
+  //vec3_print(b.shadow_pos)
 }
