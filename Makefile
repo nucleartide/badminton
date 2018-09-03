@@ -41,12 +41,13 @@ carts/badminton-data.p8: carts/badminton-writer.p8
 #
 
 # Copy HTML export over to docs folder.
-docs/badminton.html: carts/badminton.html
+docs/index.html: carts/index.html
 	@mkdir -p docs/
-	@mv carts/badminton.html docs/
+	@mv carts/index.html docs/
+	@mv carts/index.js docs/
 
 # Build HTML export.
-carts/badminton.html: carts/build.p8
+carts/index.html: carts/build.p8
 	@open -na PICO-8 --args \
 		-gif_scale 10 \
 		-home $(shell pwd) \
@@ -60,7 +61,7 @@ carts/build.p8: badminton/badminton.lua
 	@echo 'pico-8 cartridge // http://www.pico-8.com' > carts/build.p8
 	@echo 'version 16' >> carts/build.p8
 	@echo '__lua__' >> carts/build.p8
-	@echo 'export("badminton.html")' >> carts/build.p8
+	@echo 'export("index.html")' >> carts/build.p8
 	@cat badminton/badminton.lua >> carts/build.p8
 	@tail -n +5 carts/badminton-data.p8 >> carts/build.p8
 
