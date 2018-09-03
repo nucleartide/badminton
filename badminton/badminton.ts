@@ -38,7 +38,9 @@ enum button {
  */
 
 enum game_state {
+  serve,
   playing,
+  post_rally,
 }
 
 let current_game_state: game_state
@@ -46,23 +48,31 @@ let next_game_state: game_state
 let g: game
 
 _init = function(): void {
-  current_game_state = game_state.playing
-  next_game_state = game_state.playing
+  current_game_state = game_state.serve
+  next_game_state = game_state.serve
   g = game()
 }
 
 _update60 = function(): void {
   current_game_state = next_game_state
 
-  if (current_game_state === game_state.playing) {
+  if (
+    current_game_state === game_state.playing ||
+    current_game_state === game_state.serve ||
+    current_game_state === game_state.post_rally
+  ) {
     game_update(g)
   }
 }
 
 _draw = function(): void {
-  cls(col.dark_purple)
+  cls(col.blue)
 
-  if (current_game_state === game_state.playing) {
+  if (
+    current_game_state === game_state.playing ||
+    current_game_state === game_state.serve ||
+    current_game_state === game_state.post_rally
+  ) {
     game_draw(g)
   }
 }
@@ -778,6 +788,9 @@ interface game {
   player: Player
   ball: Ball
   zero_vec: vec3
+  post_rally_timer: number
+  player_score: number
+  opponent_score: number
 }
 
 function game(): game {
@@ -791,7 +804,7 @@ function game(): game {
   c.x_angle = -0.08
   c.pos.y = -0.5 * s
 
-  const p = polygon(col.dark_green, c, [
+  const p = polygon(col.peach, c, [
     vec3(-3.8 * s, 0, -7.7 * s),
     vec3(-3.8 * s, 0, 7.7 * s),
     vec3(3.8 * s, 0, 7.7 * s),
@@ -808,6 +821,9 @@ function game(): game {
     player: player(c, b),
     ball: b,
     zero_vec: vec3(),
+    post_rally_timer: 0,
+    player_score: 0,
+    opponent_score: 0,
   }
 
   return game_instance
@@ -817,10 +833,51 @@ function game_update(g: game): void {
   polygon_update(g.court)
   player_update(g.player)
   ball_update(g.ball)
+
+  // update post rally timer
+  if (g.post_rally_timer > 0) {
+    g.post_rally_timer -= 1
+    printh('not working:' + g.post_rally_timer, 'test.log')
+    if (g.post_rally_timer === 0) {
+      next_game_state = game_state.serve
+    }
+  } else {
+    printh('wtf', 'test.log')
+  }
+
+  // set timer
+  if (
+    current_game_state === game_state.playing &&
+    next_game_state === game_state.post_rally
+  ) {
+    g.post_rally_timer = 3 * 60
+  }
+
+  if (
+    // about to transition to post rally state
+    current_game_state === game_state.playing &&
+    next_game_state === game_state.post_rally
+  ) {
+    // TODO: check if ball is in valid hit region.
+    if (
+      g.ball.pos.x > -3.05 * 6 &&
+      g.ball.pos.x < 3.05 * 6 &&
+      g.ball.pos.z < 0 * 6 &&
+      g.ball.pos.z > -6.7 * 6
+    ) {
+      // then we're in a valid hit region.
+      // add to player score
+      g.player_score += 1
+    } else {
+      g.opponent_score += 1
+    }
+
+    // TODO: display score
+  }
 }
 
 type DrawFunction = (g: game) => void
-const order: Array<[vec3, DrawFunction]> = []
+let order: Array<[vec3, DrawFunction]> = []
 function game_draw(g: game): void {
   polygon_draw(g.court)
 
@@ -837,6 +894,11 @@ function game_draw(g: game): void {
   for (let i = 0; i < order.length; i++) {
     order[i][1](g)
   }
+
+  //print(current_game_state)
+  //print(g.post_rally_timer)
+  const str = g.player_score + ' - ' + g.opponent_score
+  print(str, 64 - str.length * 2, 3, col.white)
 }
 
 function game_draw_net(g: game): void {
@@ -853,10 +915,7 @@ function game_draw_ball(g: game): void {
 }
 
 function clear_order(): void {
-  for (let i = 0; i < order.length; i++) {
-    // @ts-ignore
-    order[i] = null
-  }
+  order = []
 }
 
 function insert_into_order(pos: vec3, draw_fn: (g: game) => void): void {
@@ -871,11 +930,10 @@ function insert_into_order(pos: vec3, draw_fn: (g: game) => void): void {
       // then insert
       // TODO: memory allocation, not super important though
       order[i] = [pos, draw_fn]
-
       return
     }
   }
-  order[order.length] = [pos, draw_fn]
+  add(order, [pos, draw_fn])
 }
 
 /**
@@ -920,6 +978,7 @@ function player(c: cam, b: Ball): Player {
   }
 }
 
+const meter_unit: number = 6
 function player_update(p: Player): void {
   // temporary hit variable
   p.hit = false
@@ -965,6 +1024,41 @@ function player_update(p: Player): void {
   cam_project(p.cam, p.screen_pos, p.pos)
 
   /**
+   * units.
+   */
+
+  const second = 60
+
+  /**
+   * TODO: handle ball serve
+   */
+
+  p.ball.is_kinematic = current_game_state === game_state.serve
+  if (current_game_state === game_state.serve) {
+    p.ball.pos.x = p.pos.x + 0.4 * meter_unit
+    p.ball.pos.y = p.pos.y + 1.0 * meter_unit
+    p.ball.pos.z = p.pos.z
+
+    if (btn(button.z)) {
+      // release ball
+      p.ball.is_kinematic = false
+
+      // give ball upward velocity
+      p.ball.vel.x = 0
+      p.ball.vel.y = 5 * meter_unit
+      p.ball.vel.z = 0
+
+      // change state to playing
+      next_game_state = game_state.playing
+
+      // set swing time
+      p.swing_time = 1 * second
+    }
+
+    return
+  }
+
+  /**
    * Update swing state.
    */
 
@@ -975,7 +1069,6 @@ function player_update(p: Player): void {
    */
 
   const meter = 6
-  const second = 60
 
   // player's chest is ~1m above the ground
   vec3_sub(p.player_to_ball, p.ball.pos, p.pos)
@@ -1073,6 +1166,9 @@ function player_draw(p: Player): void {
     round(p.screen_pos.y),
     col.orange
   )
+
+  //print('hit:')
+  //print(p.hit)
 }
 
 /**
@@ -1132,6 +1228,7 @@ declare var ball_update: (b: Ball) => void
     // bounds check.
     if (b.pos.y < 0) {
       b.pos.y = 0
+      next_game_state = game_state.post_rally
     }
 
     // compute new screen position.
@@ -1151,7 +1248,9 @@ function ball_draw(b: Ball): void {
     1,
     col.dark_blue
   )
-  circfill(round(b.screen_pos.x), round(b.screen_pos.y), 1, col.green)
+  circfill(round(b.screen_pos.x), round(b.screen_pos.y), 2, col.yellow)
+  //print(b.is_kinematic)
   //vec3_print(b.pos)
-  //vec3_print(b.shadow_pos)
+  //vec3_print(b.vel)
+  //vec3_print(b.acc)
 }
