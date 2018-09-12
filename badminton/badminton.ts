@@ -1,5 +1,8 @@
 ///<reference path="../@types/pico8.d.ts">
 
+const meter_unit: number = 6
+const second: number = 60 // 60 frames in a second, since we are using _update60
+
 enum col {
   black,
   dark_blue,
@@ -46,6 +49,7 @@ enum game_state {
 let current_game_state: game_state
 let next_game_state: game_state
 let g: game
+let server: Player
 
 _init = function(): void {
   current_game_state = game_state.serve
@@ -66,7 +70,7 @@ _update60 = function(): void {
 }
 
 _draw = function(): void {
-  cls(col.blue)
+  cls(col.dark_purple)
 
   if (
     current_game_state === game_state.playing ||
@@ -786,11 +790,13 @@ interface game {
   cam: cam
   court: polygon
   player: Player
+  opponent: Player
   ball: Ball
   zero_vec: vec3
   post_rally_timer: number
   player_score: number
   opponent_score: number
+  net: Net
 }
 
 function game(): game {
@@ -804,45 +810,95 @@ function game(): game {
   c.x_angle = -0.08
   c.pos.y = -0.5 * s
 
-  const p = polygon(col.peach, c, [
+  const p = polygon(col.dark_green, c, [
     vec3(-3.8 * s, 0, -7.7 * s),
     vec3(-3.8 * s, 0, 7.7 * s),
     vec3(3.8 * s, 0, 7.7 * s),
     vec3(3.8 * s, 0, -7.7 * s),
   ])
 
-  const b = ball(c)
+  const n = net(net_lines)
+  const b = ball(c, n)
+
+  /*
+  var [collides, intersection] = net_collides_with(
+    n,
+    vec3(0, 1.6 * meter_unit, -1 * meter_unit),
+    vec3(0, 1.6 * meter_unit, -2 * meter_unit)
+  )
+  assert(!collides, 'does not collide')
+  var [collides, intersection] = net_collides_with(
+    n,
+    vec3(-5 * meter_unit, 1.2 * meter_unit, -1 * meter_unit),
+    vec3(-7 * meter_unit, 1.2 * meter_unit, 1 * meter_unit)
+  )
+  assert(!collides, 'does not collide')
+  var [collides, intersection] = net_collides_with(
+    n,
+    vec3(-3 * meter_unit, 1.2 * meter_unit, -1 * meter_unit),
+    vec3(3 * meter_unit, 1.2 * meter_unit, 1 * meter_unit)
+  )
+  assert(collides, 'collides')
+  if (intersection) vec3_print(intersection)
+  stop()
+  */
+
+  const player_user = player(
+    c,
+    b,
+    -0.5 * meter_unit,
+    0,
+    5 * meter_unit,
+    player_keyboard_input,
+    vec3(-2.59 * meter_unit, 0, 0.5 * meter_unit),
+    vec3(2.59 * meter_unit, 0, 6.7 * meter_unit),
+    -1
+  )
 
   const game_instance = {
     court_lines: court_lines,
     net_lines: net_lines,
     cam: c,
     court: p,
-    player: player(c, b),
+    player: player_user,
+    opponent: player(
+      c,
+      b,
+      -0.5 * meter_unit,
+      0,
+      -5 * meter_unit,
+      player_ai,
+      vec3(-2.59 * meter_unit, 0, -6.7 * meter_unit),
+      vec3(2.59 * meter_unit, 0, -0.5 * meter_unit),
+      1
+    ),
     ball: b,
     zero_vec: vec3(),
     post_rally_timer: 0,
     player_score: 0,
     opponent_score: 0,
+    net: n,
+    server: player_user,
   }
 
+  server = player_user
   return game_instance
 }
 
 function game_update(g: game): void {
   polygon_update(g.court)
   player_update(g.player)
+  player_update(g.opponent)
   ball_update(g.ball)
 
   // update post rally timer
   if (g.post_rally_timer > 0) {
     g.post_rally_timer -= 1
-    printh('not working:' + g.post_rally_timer, 'test.log')
     if (g.post_rally_timer === 0) {
       next_game_state = game_state.serve
     }
   } else {
-    printh('wtf', 'test.log')
+    // printh('wtf', 'test.log')
   }
 
   // set timer
@@ -889,6 +945,7 @@ function game_draw(g: game): void {
   clear_order()
   insert_into_order(g.zero_vec, game_draw_net)
   insert_into_order(g.player.pos, game_draw_player)
+  insert_into_order(g.opponent.pos, game_draw_opponent)
   insert_into_order(g.ball.pos, game_draw_ball)
 
   for (let i = 0; i < order.length; i++) {
@@ -909,6 +966,9 @@ function game_draw_net(g: game): void {
 }
 function game_draw_player(g: game): void {
   player_draw(g.player)
+}
+function game_draw_opponent(g: game): void {
+  player_draw(g.opponent)
 }
 function game_draw_ball(g: game): void {
   ball_draw(g.ball)
@@ -955,14 +1015,28 @@ interface Player {
   hit: boolean
   player_to_ball: vec3
   swing_time: number
+  input_method: (p: Player) => void
+  upper_left_bound: vec3
+  lower_right_bound: vec3
+  player_dir: -1 | 1
 }
 
-function player(c: cam, b: Ball): Player {
+function player(
+  c: cam,
+  b: Ball,
+  x: number,
+  y: number,
+  z: number,
+  input_method: (p: Player) => void,
+  upper_left_bound: vec3,
+  lower_right_bound: vec3,
+  player_dir: -1 | 1
+): Player {
   const meter = 6
 
   return {
     scale: meter,
-    pos: vec3(-0.5 * meter, 0, 5 * meter),
+    pos: vec3(x, y, z),
     vel: vec3(),
     vel60: vec3(),
     acc: vec3(),
@@ -975,10 +1049,97 @@ function player(c: cam, b: Ball): Player {
     hit: false,
     player_to_ball: vec3(),
     swing_time: 0,
+    input_method: input_method,
+    upper_left_bound: upper_left_bound,
+    lower_right_bound: lower_right_bound,
+    player_dir: player_dir,
   }
 }
 
-const meter_unit: number = 6
+function player_keyboard_input(p: Player): void {
+  if (btn(button.left)) p.acc.x -= p.desired_speed
+  if (btn(button.right)) p.acc.x += p.desired_speed
+  if (btn(button.up)) p.acc.z -= p.desired_speed
+  if (btn(button.down)) p.acc.z += p.desired_speed
+}
+
+function player_ai(p: Player): void {
+  // move in direction of ball
+  vec3_zero(p.acc)
+  vec3_sub(p.acc, p.ball.pos, p.pos)
+  p.acc.y = 0
+
+  // if ball is in range, swing
+}
+
+function player_swing(p: Player): void {
+  /**
+   * Compute `player_to_ball` vector.
+   *
+   * Note: player's chest is 1m above the ground.
+   */
+
+  vec3_sub(p.player_to_ball, p.ball.pos, p.pos)
+  p.player_to_ball.y += 1 * meter_unit
+
+  /**
+   * Compute swing pre-condition.
+   *
+   * Condition: ball is in-range.
+   * Condition: ball is still in air.
+   * Condition: not currently swinging.
+   * Condition: pressed the swing button.
+   */
+
+  if (
+    !(
+      vec3_magnitude(p.player_to_ball) < 2.5 * meter_unit &&
+      p.ball.pos.y > 0 &&
+      p.swing_time < 0.1 &&
+      btn(button.z)
+    )
+  ) {
+    return
+  }
+
+  /**
+   * Enter a swing state.
+   */
+
+  p.swing_time = 1 * second
+
+  /**
+   * Right-side lob.
+   *
+   * Condition: ball is below 1m.
+   * Condition: ball is on right side.
+   * Condition: ball is in front of player.
+   */
+
+  if (
+    p.ball.pos.y < 1 * meter_unit &&
+    p.player_to_ball.x > 0 &&
+    p.player_to_ball.z <= 1
+  ) {
+    // Slap `up` vector into `player_to_ball` vector.
+    vec3_cross(p.spare, p.up, p.player_to_ball)
+
+    // Add some forward velocity.
+    p.spare.z += 6 * meter_unit
+
+    // Add some upward velocity.
+    // The lower the ball, the greater the upward velocity.
+    p.spare.y += 50 + (1 * meter_unit - p.ball.pos.y) * 5
+
+    // Add velocity to ball velocity.
+    vec3_add(p.ball.vel, p.ball.vel, p.spare)
+  }
+
+  // TODO: Left-side lob.
+  // TODO: Left overhead.
+  // TODO: Right overhead.
+}
+
 function player_update(p: Player): void {
   // temporary hit variable
   p.hit = false
@@ -990,10 +1151,7 @@ function player_update(p: Player): void {
    */
 
   vec3_zero(p.acc)
-  if (btn(button.left)) p.acc.x -= p.desired_speed
-  if (btn(button.right)) p.acc.x += p.desired_speed
-  if (btn(button.up)) p.acc.z -= p.desired_speed
-  if (btn(button.down)) p.acc.z += p.desired_speed
+  p.input_method(p)
 
   /**
    * Normalize & scale acceleration.
@@ -1018,6 +1176,16 @@ function player_update(p: Player): void {
   vec3_add(p.pos, p.pos, p.vel60)
 
   /**
+   * Bounds checking.
+   */
+
+  if (p.pos.x < p.upper_left_bound.x) p.pos.x = p.upper_left_bound.x
+  if (p.pos.x > p.lower_right_bound.x) p.pos.x = p.lower_right_bound.x
+
+  if (p.pos.z < p.upper_left_bound.z) p.pos.z = p.upper_left_bound.z
+  if (p.pos.z > p.lower_right_bound.z) p.pos.z = p.lower_right_bound.z
+
+  /**
    * Update screen position.
    */
 
@@ -1034,7 +1202,7 @@ function player_update(p: Player): void {
    */
 
   p.ball.is_kinematic = current_game_state === game_state.serve
-  if (current_game_state === game_state.serve) {
+  if (current_game_state === game_state.serve && server === p) {
     p.ball.pos.x = p.pos.x + 0.4 * meter_unit
     p.ball.pos.y = p.pos.y + 1.0 * meter_unit
     p.ball.pos.z = p.pos.z
@@ -1111,7 +1279,7 @@ function player_update(p: Player): void {
       p.player_to_ball.x < 0 * meter &&
       p.player_to_ball.z <= 1
     ) {
-      printh('left side lob', 'test.log')
+      //printh('left side lob', 'test.log')
       // execute right side lob:
       // slap up vector into player_to_ball vector
       vec3_cross(p.spare, p.player_to_ball, p.up)
@@ -1120,7 +1288,7 @@ function player_update(p: Player): void {
       p.spare.y += (1 * meter - p.ball.pos.y) * 5 + 50
       // add velocity to ball velocity
       vec3_add(p.ball.vel, p.ball.vel, p.spare)
-      vec3_printh(p.spare)
+      //vec3_printh(p.spare)
     }
 
     // TODO: handle left overhead hit
@@ -1129,7 +1297,7 @@ function player_update(p: Player): void {
       p.player_to_ball.z <= 1 &&
       p.player_to_ball.x < 0 * meter
     ) {
-      printh('left overhead hit', 'test.log')
+      //printh('left overhead hit', 'test.log')
       vec3_cross(p.spare, p.player_to_ball, p.up)
       p.spare.z -= 50 * 3
       p.spare.y += 10
@@ -1143,7 +1311,7 @@ function player_update(p: Player): void {
       p.player_to_ball.z <= 1 &&
       p.player_to_ball.x > 0 * meter
     ) {
-      printh('right overhead hit', 'test.log')
+      //printh('right overhead hit', 'test.log')
       vec3_cross(p.spare, p.up, p.player_to_ball)
       p.spare.z -= 50 * 3
       p.spare.y += 10
@@ -1186,9 +1354,11 @@ interface Ball {
   screen_shadow_pos: vec3
   cam: cam
   is_kinematic: boolean
+  net: Net
+  intersects: boolean
 }
 
-function ball(c: cam): Ball {
+function ball(c: cam, n: Net): Ball {
   const meter = 6
 
   return {
@@ -1202,12 +1372,15 @@ function ball(c: cam): Ball {
     screen_shadow_pos: vec3(),
     cam: c,
     is_kinematic: false,
+    net: n,
+    intersects: false,
   }
 }
 
 declare var ball_update: (b: Ball) => void
 {
   const spare = vec3()
+  const next_pos = vec3()
   ball_update = (b: Ball): void => {
     if (!b.is_kinematic && b.pos.y > 0) {
       // compute change in velocity for this frame.
@@ -1221,8 +1394,42 @@ declare var ball_update: (b: Ball) => void
       vec3_assign(spare, b.vel)
       vec3_scale(spare, 1 / 60)
 
-      // apply change in position.
-      vec3_add(b.pos, b.pos, spare)
+      // TODO
+      // check if there is an intersection
+      vec3_zero(next_pos)
+      vec3_add(next_pos, b.pos, spare)
+      const [intersects, intersection] = net_collides_with(
+        b.net,
+        b.pos,
+        next_pos
+      )
+      b.intersects = intersects
+      if (intersects && intersection) {
+        // if in front of net
+        b.pos.x = intersection.x
+        b.pos.y = intersection.y
+        if (b.pos.z > 0) {
+          // set position to slightly in front of net
+          b.pos.z = 1
+        } else if (b.pos.z < 0) {
+          // set position to slightly behind net
+          b.pos.z = -1
+        } else {
+          assert(false)
+        }
+        // reverse z-component of velocity
+        b.vel.z = -b.vel.z
+        vec3_scale(b.vel, 0.1)
+      } else {
+        vec3_assign(spare, b.vel)
+        vec3_scale(spare, 1 / 60)
+
+        // apply change in position.
+        vec3_add(b.pos, b.pos, spare)
+
+        // TODO: temporary
+        // b.pos.y = 1.2 * meter_unit
+      }
     }
 
     // bounds check.
@@ -1242,15 +1449,86 @@ declare var ball_update: (b: Ball) => void
 }
 
 function ball_draw(b: Ball): void {
+  // draw ball shadow
   circfill(
     round(b.screen_shadow_pos.x),
     round(b.screen_shadow_pos.y),
     1,
     col.dark_blue
   )
-  circfill(round(b.screen_pos.x), round(b.screen_pos.y), 2, col.yellow)
+
+  // draw ball
+  circfill(round(b.screen_pos.x), round(b.screen_pos.y), 1, col.yellow)
+
   //print(b.is_kinematic)
   //vec3_print(b.pos)
   //vec3_print(b.vel)
   //vec3_print(b.acc)
+  //print('intersects:')
+  //print(b.intersects)
+}
+
+/**
+ * -->8 7. net.
+ */
+
+interface Net {
+  lines: Array<line>
+  net_top: number
+  net_bottom: number
+  left_pole: number
+  right_pole: number
+}
+
+function net(lines: Array<line>): Net {
+  return {
+    lines: lines,
+    net_top: 1.5 * meter_unit,
+    net_bottom: 0.9 * meter_unit,
+    left_pole: -2.95 * meter_unit,
+    right_pole: 2.95 * meter_unit,
+  }
+}
+
+/** !TupleReturn */
+function net_collides_with(
+  n: Net,
+  prev_pos: vec3,
+  next_pos: vec3
+): [true, vec3] | [false, null] {
+  if (
+    !((prev_pos.z > 0 && next_pos.z < 0) || (prev_pos.z < 0 && next_pos.z > 0))
+  ) {
+    return [false, null]
+  }
+
+  // z = mx + z0, set z to 0 and solve for x
+  const z0 = prev_pos.z
+  let x_at_net: number
+  if (next_pos.x - prev_pos.x < 0.1) {
+    x_at_net = prev_pos.x
+  } else {
+    const m = (next_pos.z - prev_pos.z) / (next_pos.x - prev_pos.x)
+    const diff = -z0 / m
+    x_at_net = prev_pos.x + diff
+  }
+  const x_in_range = n.left_pole <= x_at_net && x_at_net <= n.right_pole
+  if (!x_in_range) {
+    return [false, null]
+  }
+
+  // z = m2*y + z0, set z to 0 and solve for y
+  const m2 = (next_pos.z - prev_pos.z) / (next_pos.y - prev_pos.y)
+  //printh('m2:' + m2, 'test.log')
+  const y = -z0 / m2
+  const y_at_net = prev_pos.y + y
+  const y_in_range = n.net_bottom <= y_at_net && y_at_net < n.net_top
+  if (!y_in_range) {
+    return [false, null]
+  }
+
+  //printh('collides', 'test.log')
+  //vec3_printh(prev_pos)
+  //vec3_printh(next_pos)
+  return [true, vec3(x_at_net, y_at_net, 0)]
 }
