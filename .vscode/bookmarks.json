@@ -1,0 +1,67 @@
+[
+	{
+		"path": "$ROOTPATH$/badminton/badminton.ts",
+		"bookmarks": [
+			{
+				"line": 2,
+				"column": 0,
+				"label": "Configuration."
+			},
+			{
+				"line": 19,
+				"column": 0,
+				"label": "Utils."
+			},
+			{
+				"line": 372,
+				"column": 0,
+				"label": "Game loop."
+			},
+			{
+				"line": 528,
+				"column": 0,
+				"label": "Post–Game loop."
+			},
+			{
+				"line": 530,
+				"column": 0,
+				"label": "Line primitive."
+			},
+			{
+				"line": 571,
+				"column": 0,
+				"label": "Polygon primitive."
+			},
+			{
+				"line": 687,
+				"column": 0,
+				"label": "Camera entity."
+			},
+			{
+				"line": 745,
+				"column": 0,
+				"label": "Game entity."
+			},
+			{
+				"line": 799,
+				"column": 0,
+				"label": "Player entity."
+			},
+			{
+				"line": 1297,
+				"column": 0,
+				"label": "Ball entity."
+			},
+			{
+				"line": 1422,
+				"column": 0,
+				"label": "Net entity."
+			},
+			{
+				"line": 1496,
+				"column": 0,
+				"label": "Court entity."
+			}
+		]
+	}
+]

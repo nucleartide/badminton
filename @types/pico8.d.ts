@@ -5,15 +5,18 @@
 declare function assert<T>(cond: boolean, message?: T): void
 declare function stop<T>(message?: T): void
 declare function printh<T>(str: T, filename?: string, overwrite?: boolean): void
+declare function stat(n: number): number
 
 /**
  * Program structure.
  */
 
+/*
 declare var _init: () => void
 declare var _update: () => void
 declare var _update60: () => void
 declare var _draw: () => void
+*/
 
 /**
  * Graphics.
@@ -113,7 +116,7 @@ declare type button_index = 0 | 1 | 2 | 3 | 4 | 5
 declare type PlayerIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
 
 declare function btn(): number
-declare function btn(i: button, p?: PlayerIndex): boolean
+declare function btn(i: button_index, p?: PlayerIndex): boolean
 
 /**
  * Audio.
@@ -128,6 +131,7 @@ declare function btn(i: button, p?: PlayerIndex): boolean
  */
 
 declare function peek4(addr: number): number
+declare function poke(addr: number, val: number): void
 declare function poke4(addr: number, val: number): void
 declare function memcpy(
   dest_addr: number,

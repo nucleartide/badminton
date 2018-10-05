@@ -1,0 +1,12 @@
+digraph G {
+ game -> ball
+ game -> court
+ ball -> camera
+ ball -> net
+ net -> camera
+ player1 -> game
+ player1 -> camera
+ court -> camera
+ player2 -> game
+ player2 -> camera
+}

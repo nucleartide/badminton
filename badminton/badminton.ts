@@ -1,7 +1,25 @@
-///<reference path="../@types/pico8.d.ts">
+/// <reference path="../@types/pico8.d.ts">
 
-const meter_unit: number = 6
-const second: number = 60 // 60 frames in a second, since we are using _update60
+/**
+ * Configuration.
+ */
+
+// 1 meter === 6 world space units.
+const meter: number = 6
+
+// 1 second === 60 frames, since we're using `_update60`.
+const second: number = 60
+
+// Required score to reach a win state.
+// TODO: Remove upon fleshing out scoring.
+const win_score = 1
+
+// Zero vector. Use it for z-sorting!
+const zero_vec = { x: 0, y: 0, z: 0 }
+
+/**
+ * Color.
+ */
 
 enum col {
   black,
@@ -22,10 +40,18 @@ enum col {
   peach,
 }
 
+/**
+ * Palette.
+ */
+
 enum palette {
   draw,
   screen,
 }
+
+/**
+ * Button.
+ */
 
 enum button {
   left,
@@ -37,111 +63,210 @@ enum button {
 }
 
 /**
- * --> 0. game loop.
+ * Actor.
  */
 
-enum game_state {
-  serve,
-  playing,
+interface Actor {
+  update: (o: any) => void
+  draw: (o: any) => void
+}
+
+/**
+ * State.
+ */
+
+enum state {
+  pre_serve, // "drop ball" to transition to "serving"
+  serving, // "swing" to transition to "rally"
+  rally,
   post_rally,
 }
 
-let current_game_state: game_state
-let next_game_state: game_state
-let g: game
-let server: Player
-
-_init = function(): void {
-  current_game_state = game_state.serve
-  next_game_state = game_state.serve
-  g = game()
-}
-
-_update60 = function(): void {
-  current_game_state = next_game_state
-
-  if (
-    current_game_state === game_state.playing ||
-    current_game_state === game_state.serve ||
-    current_game_state === game_state.post_rally
-  ) {
-    game_update(g)
-  }
-}
-
-_draw = function(): void {
-  cls(col.dark_purple)
-
-  if (
-    current_game_state === game_state.playing ||
-    current_game_state === game_state.serve ||
-    current_game_state === game_state.post_rally
-  ) {
-    game_draw(g)
-  }
-}
-
-/*
-// This is a camera & polygon test.
-{
-  let c: cam, p: polygon
-
-  const init = function(): void {
-    const s = 6
-
-    c = cam()
-    c.dist = 12 * s
-    c.fov = 34 * s
-
-    // pentagon.
-    p = polygon(col.peach, c, [
-      vec3(30, -30, 0),
-      vec3(30, 30, 0),
-      vec3(-30, 30, 0),
-      vec3(-50, 0, 0),
-      vec3(-30, -30, 0),
-    ])
-
-    // court.
-    p = polygon(col.dark_green, c, [
-      // 6.1 x 13.4
-      vec3((3.05 + 1) * s, 0, (6.7 + 1) * s),
-      vec3((3.05 + 1) * s, 0, (-6.7 - 1) * s),
-      vec3((-3.05 - 1) * s, 0, (-6.7 - 1) * s),
-      vec3((-3.05 - 1) * s, 0, (6.7 + 1) * s),
-    ])
-  }
-
-  const update = function(): void {
-    if (btn(button.down)) c.x_angle += 0.01
-    if (btn(button.up)) c.x_angle -= 0.01
-    if (btn(button.left)) c.y_angle += 0.01
-    if (btn(button.right)) c.y_angle -= 0.01
-    polygon_update(p)
-  }
-
-  const draw = function(): void {
-    cls(col.dark_blue)
-    polygon_draw(p)
-  }
-
-  _init = init
-  _update60 = update
-  _draw = draw
-}
-*/
-
 /**
- * --> 1. math.
+ * Vec3.
  */
 
-interface vec3 {
+interface Vec3 {
   x: number
   y: number
   z: number
 }
 
-type mat3 = [vec3, vec3, vec3]
+function vec3(x?: number, y?: number, z?: number): Vec3 {
+  return {
+    x: x || 0,
+    y: y || 0,
+    z: z || 0,
+  }
+}
+
+function vec3_add(out: Vec3, a: Vec3, b: Vec3): void {
+  out.x = a.x + b.x
+  out.y = a.y + b.y
+  out.z = a.z + b.z
+}
+
+function vec3_sub(out: Vec3, a: Vec3, b: Vec3): void {
+  out.x = a.x - b.x
+  out.y = a.y - b.y
+  out.z = a.z - b.z
+}
+
+function vec3_mul(out: Vec3, a: Vec3, b: Vec3): void {
+  out.x = a.x * b.x
+  out.y = a.y * b.y
+  out.z = a.z * b.z
+}
+
+function vec3_print(v: Vec3): void {
+  print(v.x + ', ' + v.y + ', ' + v.z)
+}
+
+function vec3_printh(v: Vec3): void {
+  printh(v.x + ', ' + v.y + ', ' + v.z, 'test.log')
+}
+
+function vec3_dot(a: Vec3, b: Vec3): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+function vec3_cross(out: Vec3, a: Vec3, b: Vec3): void {
+  const ax = a.x
+  const ay = a.y
+  const az = a.z
+
+  const bx = b.x
+  const by = b.y
+  const bz = b.z
+
+  out.x = ay * bz - az * by
+  out.y = az * bx - ax * bz
+  out.z = ax * by - ay * bx
+}
+
+function vec3_scale(v: Vec3, c: number): void {
+  v.x *= c
+  v.y *= c
+  v.z *= c
+}
+
+function vec3_magnitude(v: Vec3): number {
+  if (v.x > 104 || v.y > 104 || v.z > 104) {
+    const m = max(max(v.x, v.y), v.z)
+    const x = v.x / m,
+      y = v.y / m,
+      z = v.z / m
+    return sqrt(x ** 2 + y ** 2 + z ** 2) * m
+  }
+
+  return sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2)
+}
+
+declare var vec3_dist: (a: Vec3, b: Vec3) => number
+{
+  const spare = vec3()
+  vec3_dist = (a: Vec3, b: Vec3): number => {
+    vec3_sub(spare, a, b)
+    return vec3_magnitude(spare)
+  }
+}
+
+function vec3_normalize(v: Vec3): void {
+  const m = vec3_magnitude(v)
+  if (m === 0) return
+  v.x /= m
+  v.y /= m
+  v.z /= m
+}
+
+function vec3_lerp(out: Vec3, a: Vec3, b: Vec3, t: number): void {
+  const ax = a.x,
+    ay = a.y,
+    az = a.z
+  const bx = b.x,
+    by = b.y,
+    bz = b.z
+  out.x = lerp(ax, bx, t)
+  out.y = lerp(ay, by, t)
+  out.z = lerp(az, bz, t)
+}
+
+let vec3_mul_mat3: (out: Vec3, v: Vec3, m: Mat3) => void
+{
+  const spare = vec3()
+  vec3_mul_mat3 = function (out: Vec3, v: Vec3, m: Mat3): void {
+    spare.x = v.x
+    spare.y = v.y
+    spare.z = v.z
+    out.x = vec3_dot(spare, m[0])
+    out.y = vec3_dot(spare, m[1])
+    out.z = vec3_dot(spare, m[2])
+  }
+}
+
+function assert_vec3_equal(a: Vec3, b: Vec3): void {
+  assert(a.x === b.x)
+  assert(a.y === b.y)
+  assert(a.z === b.z)
+}
+
+function vec3_zero(v: Vec3): void {
+  v.x = 0
+  v.y = 0
+  v.z = 0
+}
+
+function vec3_assign(a: Vec3, b: Vec3): void {
+  a.x = b.x
+  a.y = b.y
+  a.z = b.z
+}
+
+/**
+ * Mat3.
+ */
+
+type Mat3 = [Vec3, Vec3, Vec3]
+
+function mat3(): Mat3 {
+  return [vec3(), vec3(), vec3()]
+}
+
+// set matrix `m` to be a counterclockwise rotation of `a` around the x-axis.
+// assume right-handed coordinates.
+function mat3_rotate_x(m: Mat3, a: number): void {
+  m[0].x = 1
+  m[0].y = 0
+  m[0].z = 0
+
+  m[1].x = 0
+  m[1].y = cos(a)
+  m[1].z = sin(a)
+
+  m[2].x = 0
+  m[2].y = -sin(a)
+  m[2].z = cos(a)
+}
+
+// set matrix `m` to be a counterclockwise rotation of `a`
+// around the y-axis. assume right-handed coordinates.
+function mat3_rotate_y(m: Mat3, a: number): void {
+  m[0].x = cos(a)
+  m[0].y = 0
+  m[0].z = -sin(a)
+
+  m[1].x = 0
+  m[1].y = 1
+  m[1].z = 0
+
+  m[2].x = sin(a)
+  m[2].y = 0
+  m[2].z = cos(a)
+}
+
+/**
+ * Math utils.
+ */
 
 function round(n: number): number {
   return flr(n + 0.5)
@@ -159,7 +284,7 @@ function lerp(a: number, b: number, t: number): number {
 // when all points are on the same scanline, for instance.
 //
 // also note: y points down.
-function clockwise(points: Array<vec3>): boolean {
+function clockwise(points: Array<Vec3>): boolean {
   let sum = 0
   for (let i = 0; i < points.length; i++) {
     const point = points[i]
@@ -173,314 +298,246 @@ function clockwise(points: Array<vec3>): boolean {
   return sum <= 0
 }
 
-/*
-{
-  const points = [
-    {x:-50,y:50,z:0},
-    {x: 50,y:50,z:0},
-    {x: 50,y:-50,z:0},
-    {x:-50,y:-50,z:0},
-  ]
-
-  const points2 = [
-    {x:-50,y:-50,z:0},
-    {x: 50,y:-50,z:0},
-    {x: 50,y:50,z:0},
-    {x:-50,y:50,z:0},
-  ]
-
-  assert(!clockwise(points))
-  assert(clockwise(points2))
-  stop()
-}
-*/
-
-function vec3(x?: number, y?: number, z?: number): vec3 {
-  return {
-    x: x || 0,
-    y: y || 0,
-    z: z || 0,
-  }
-}
-
-function vec3_add(out: vec3, a: vec3, b: vec3): void {
-  out.x = a.x + b.x
-  out.y = a.y + b.y
-  out.z = a.z + b.z
-}
-
-function vec3_sub(out: vec3, a: vec3, b: vec3): void {
-  out.x = a.x - b.x
-  out.y = a.y - b.y
-  out.z = a.z - b.z
-}
-
-function vec3_mul(out: vec3, a: vec3, b: vec3): void {
-  out.x = a.x * b.x
-  out.y = a.y * b.y
-  out.z = a.z * b.z
-}
-
-function vec3_print(v: vec3): void {
-  print(v.x + ', ' + v.y + ', ' + v.z)
-}
-
-function vec3_printh(v: vec3): void {
-  printh(v.x + ', ' + v.y + ', ' + v.z, 'test.log')
-}
-
-function vec3_dot(a: vec3, b: vec3): number {
-  return a.x * b.x + a.y * b.y + a.z * b.z
-}
-
-function vec3_cross(out: vec3, a: vec3, b: vec3): void {
-  const ax = a.x
-  const ay = a.y
-  const az = a.z
-
-  const bx = b.x
-  const by = b.y
-  const bz = b.z
-
-  out.x = ay * bz - az * by
-  out.y = az * bx - ax * bz
-  out.z = ax * by - ay * bx
-}
-
-function vec3_scale(v: vec3, c: number): void {
-  v.x *= c
-  v.y *= c
-  v.z *= c
-}
-
-function vec3_magnitude(v: vec3): number {
-  if (v.x > 104 || v.y > 104 || v.z > 104) {
-    const m = max(max(v.x, v.y), v.z)
-    const x = v.x / m,
-      y = v.y / m,
-      z = v.z / m
-    return sqrt(x ** 2 + y ** 2 + z ** 2) * m
-  }
-
-  return sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2)
-}
-
-declare var vec3_dist: (a: vec3, b: vec3) => number
-{
-  const spare = vec3()
-  vec3_dist = (a: vec3, b: vec3): number => {
-    vec3_sub(spare, a, b)
-    return vec3_magnitude(spare)
-  }
-}
-
-/*
-{
-  print(vec3_magnitude(vec3(1, 1, 1)))
-  print(vec3_magnitude(vec3(2, 2, 2)))
-  print(vec3_magnitude(vec3(3, 3, 3)))
-  print(vec3_magnitude(vec3(200, 200, 200)))
-  stop()
-}
-*/
-
-function vec3_normalize(v: vec3): void {
-  const m = vec3_magnitude(v)
-  if (m === 0) return
-  v.x /= m
-  v.y /= m
-  v.z /= m
-}
-
-/*
-{
-  const v = vec3(200, 200, 200)
-  vec3_normalize(v)
-  print(vec3_magnitude(v))
-  stop()
-}
-*/
-
-function vec3_lerp(out: vec3, a: vec3, b: vec3, t: number): void {
-  const ax = a.x,
-    ay = a.y,
-    az = a.z
-  const bx = b.x,
-    by = b.y,
-    bz = b.z
-  out.x = lerp(ax, bx, t)
-  out.y = lerp(ay, by, t)
-  out.z = lerp(az, bz, t)
-}
-
-let vec3_mul_mat3: (out: vec3, v: vec3, m: mat3) => void
-{
-  const spare = vec3()
-  vec3_mul_mat3 = function(out: vec3, v: vec3, m: mat3): void {
-    spare.x = v.x
-    spare.y = v.y
-    spare.z = v.z
-    out.x = vec3_dot(spare, m[0])
-    out.y = vec3_dot(spare, m[1])
-    out.z = vec3_dot(spare, m[2])
-  }
-}
-
-function assert_vec3_equal(a: vec3, b: vec3): void {
-  assert(a.x === b.x)
-  assert(a.y === b.y)
-  assert(a.z === b.z)
-}
-
-/*
-{
-  const a = vec3(1, 0, 0)
-  const b = vec3(0, 1, 0)
-  const out = vec3()
-  vec3_cross(out, a, b)
-  assert_vec3_equal(out, vec3(0, 0, 1))
-  stop()
-}
-*/
-
-function vec3_zero(v: vec3): void {
-  v.x = 0
-  v.y = 0
-  v.z = 0
-}
-
-function vec3_assign(a: vec3, b: vec3): void {
-  a.x = b.x
-  a.y = b.y
-  a.z = b.z
-}
-
-function mat3(): mat3 {
-  return [vec3(), vec3(), vec3()]
-}
-
-// set matrix `m` to be a counterclockwise rotation of `a` around the x-axis.
-// assume right-handed coordinates.
-function mat3_rotate_x(m: mat3, a: number): void {
-  m[0].x = 1
-  m[0].y = 0
-  m[0].z = 0
-
-  m[1].x = 0
-  m[1].y = cos(a)
-  m[1].z = sin(a)
-
-  m[2].x = 0
-  m[2].y = -sin(a)
-  m[2].z = cos(a)
-}
-
-/*
-{
-  const out = vec3()
-  const v = vec3(-46, 0, -64)
-  const m = mat3()
-
-  mat3_rotate_x(m, 0)
-  vec3_mul_mat3(out, v, m)
-  assert_vec3_equal(out, vec3(-46, 0, -64))
-
-  mat3_rotate_x(m, 0.25)
-  vec3_mul_mat3(out, v, m)
-  assert_vec3_equal(out, vec3(-46, 64, 0))
-
-  mat3_rotate_x(m, 0.5)
-  vec3_mul_mat3(out, v, m)
-  assert_vec3_equal(out, vec3(-46, 0, 64))
-
-  mat3_rotate_x(m, 0.75)
-  vec3_mul_mat3(out, v, m)
-  assert_vec3_equal(out, vec3(-46, -64, 0))
-  stop()
-}
-*/
-
-// set matrix `m` to be a counterclockwise rotation of `a`
-// around the y-axis. assume right-handed coordinates.
-function mat3_rotate_y(m: mat3, a: number): void {
-  m[0].x = cos(a)
-  m[0].y = 0
-  m[0].z = -sin(a)
-
-  m[1].x = 0
-  m[1].y = 1
-  m[1].z = 0
-
-  m[2].x = sin(a)
-  m[2].y = 0
-  m[2].z = cos(a)
-}
-
-/*
-{
-  const out = vec3()
-  const v = vec3(-46, 0, -64)
-  const m = mat3()
-
-  mat3_rotate_y(m, 0)
-  vec3_mul_mat3(out, v, m)
-  assert_vec3_equal(out, vec3(-46, 0, -64))
-
-  mat3_rotate_y(m, 0.25)
-  vec3_mul_mat3(out, v, m)
-  assert_vec3_equal(out, vec3(-64, 0, 46))
-
-  mat3_rotate_y(m, 0.5)
-  vec3_mul_mat3(out, v, m)
-  assert_vec3_equal(out, vec3(46, 0, 64))
-
-  mat3_rotate_y(m, 0.75)
-  vec3_mul_mat3(out, v, m)
-  assert_vec3_equal(out, vec3(64, 0, -46))
-}
-*/
-
-/*
-{
-  const out = vec3()
-  const v = vec3(-46, 0, -64)
-  const m = mat3()
-
-  mat3_rotate_y(m, 0.5)
-  vec3_mul_mat3(out, v, m)
-
-  mat3_rotate_x(m, 0.25)
-  vec3_mul_mat3(out, out, m)
-
-  assert_vec3_equal(out, vec3(46, -64, 0))
-}
-*/
-
 /**
- * --> 2. data readers & drawing.
+ * Readers.
  */
 
 let read_num: () => number
 {
   const map_addr = 0x2000
   let offset = 0
-  read_num = function(): number {
+  read_num = function (): number {
     const n = peek4(map_addr + offset)
     offset += 4
     return n
   }
 }
 
-function read_vec3(): vec3 {
+function read_vec3(): Vec3 {
   return vec3(read_num(), read_num(), read_num())
 }
 
+/**
+ * Z-sorting.
+ */
+
+type OrderArray = Array<[Vec3, Actor]>
+
+function insert_into(order: OrderArray, pos: Vec3, a: Actor): void {
+  for (let i = 0; i < order.length; i++) {
+    const current = order[i]
+    if (pos.z < current[0].z) {
+      // Move everything 1 over.
+      for (let j = order.length - 1; j >= i; j--) {
+        order[j + 1] = order[j]
+      }
+
+      // Insert.
+      order[i] = [pos, a]
+      return
+    }
+  }
+
+  add(order, [pos, a])
+}
+
+/**
+ * Reach.
+ */
+
+const reach_spare = vec3()
+/** !TupleReturn */
+function reach(
+  head: Vec3,
+  tail: Vec3,
+  target: Vec3,
+  head_tail_len: number
+): [Vec3, Vec3] {
+  // stretched vec
+  const tail_to_target = vec3_sub(reach_spare, tail, target)
+  const stretched_len = vec3_magnitude(reach_spare)
+
+  // compute scale
+  const scale = head_tail_len / stretched_len
+
+  return [
+    { x: target.x, y: target.y, z: target.z },
+    {
+      x: target.x + reach_spare.x * scale,
+      y: target.y + reach_spare.y * scale,
+      z: target.z + reach_spare.z * scale,
+    },
+  ]
+}
+
+/**
+ * Game loop.
+ *
+ * States:
+ * - Menu (todo)
+ * - Game
+ */
+
+let actors: Array<Actor>
+let actors_obj: { [key: string]: Actor }
+
+function _init(): void {
+  /**
+   * Read map data.
+   */
+
+  const court_lines = read_lines()
+  const net_lines = read_lines()
+
+  /**
+   * Construct camera.
+   */
+
+  const c = cam()
+  c.dist = 12 * meter
+  c.fov = 34 * meter
+  c.x_angle = -0.05
+  c.pos.y = -0.5 * meter
+
+  /**
+   * Construct net.
+   */
+
+  const n = net(net_lines, c)
+
+  /**
+   * Construct court.
+   */
+
+  const crt = court(court_lines, c)
+
+  /**
+   * Construct ball.
+   */
+
+  const b = ball(c, n)
+
+  /**
+   * Construct game.
+   */
+
+  const g = game(crt, b)
+
+  /**
+   * Construct player.
+   */
+
+  const player_user = player(
+    c,
+    b,
+    -0.5 * meter,
+    0,
+    5 * meter,
+    player_keyboard_input,
+    vec3(-2.59 * meter, 0, 0.5 * meter),
+    vec3(2.59 * meter, 0, 6.7 * meter),
+    -1,
+    g,
+    true,
+    player_side.left,
+    player_human_swing,
+    player_human_wind_up
+  )
+
+  /**
+   * Construct opponent.
+   */
+
+  const opponent = player(
+    c,
+    b,
+    -0.5 * meter,
+    0,
+    -5 * meter,
+    player_ai,
+    vec3(-2.59 * meter, 0, -6.7 * meter),
+    vec3(2.59 * meter, 0, -0.5 * meter),
+    1,
+    g,
+    false,
+    player_side.right,
+    player_cpu_swing,
+    player_cpu_wind_up
+  )
+
+  /**
+   * Initialize actors.
+   */
+
+  // Ball should come after Players to avoid lag.
+  // Game should come first, because it holds
+  // current game state.
+  actors = [g, c, n, crt, player_user, opponent, b]
+
+  actors_obj = {
+    camera: c,
+    net: n,
+    court: crt,
+    ball: b,
+    game: g,
+    player: player_user,
+    opponent: opponent,
+  }
+}
+
+function _update60(): void {
+  for (let i = 0; i < actors.length; i++) {
+    const a = actors[i]
+    a.update(a)
+  }
+}
+
+function _draw(): void {
+  /**
+   * Clear screen.
+   */
+
+  cls(col.dark_purple)
+
+  /**
+   * Do z-sorting.
+   */
+
+  const order: OrderArray = []
+  insert_into(order, zero_vec, actors_obj.net)
+  insert_into(order, (actors_obj.player as Player).pos, actors_obj.player)
+  insert_into(order, (actors_obj.opponent as Player).pos, actors_obj.opponent)
+  insert_into(order, (actors_obj.ball as Ball).pos, actors_obj.ball)
+
+  /**
+   * Draw.
+   */
+
+  // Draw court first.
+  const court = actors_obj.court
+  court.draw(court)
+
+  // Draw z-sorted actors.
+  for (let i = 0; i < order.length; i++) {
+    const a = order[i][1]
+    a.draw(a)
+  }
+
+  // Draw game last.
+  const game = actors_obj.game
+  game.draw(game)
+}
+
+/**
+ * Line.
+ */
+
 interface line {
-  start_vec: vec3
-  end_vec: vec3
+  start_vec: Vec3
+  end_vec: Vec3
   col: col
-  start_screen: vec3
-  end_screen: vec3
+  start_screen: Vec3
+  end_screen: Vec3
 }
 
 function read_lines(): Array<line> {
@@ -500,7 +557,7 @@ function read_lines(): Array<line> {
   return lines
 }
 
-function line_draw(l: line, c: cam): void {
+function line_draw(l: line, c: Camera): void {
   cam_project(c, l.start_screen, l.start_vec)
   cam_project(c, l.end_screen, l.end_vec)
   line(
@@ -512,15 +569,19 @@ function line_draw(l: line, c: cam): void {
   )
 }
 
+/**
+ * Polygon.
+ */
+
 interface polygon {
-  points_world: Array<vec3>
-  points_screen: Array<vec3>
+  points_world: Array<Vec3>
+  points_screen: Array<Vec3>
   col: col
-  cam: cam
+  cam: Camera
 }
 
-function polygon(col: col, cam: cam, points: Array<vec3>): polygon {
-  const points_screen: Array<vec3> = []
+function polygon(col: col, cam: Camera, points: Array<Vec3>): polygon {
+  const points_screen: Array<Vec3> = []
   for (let i = 0; i < points.length; i++) {
     add(points_screen, vec3())
   }
@@ -545,8 +606,8 @@ interface NumberMap {
 
 /** !TupleReturn */
 function polygon_edge(
-  v1: vec3,
-  v2: vec3,
+  v1: Vec3,
+  v2: Vec3,
   xl: NumberMap,
   xr: NumberMap,
   is_clockwise: boolean
@@ -584,8 +645,8 @@ function polygon_edge(
     t = (t === xl && xr) || xl
   }
 
-  // for each scanline in range, compute left or right side.
-  // we must use floored y, since we are computing sides for
+  // For each scanline in range, compute left or right side.
+  // We must use floored y, since we are computing sides for
   // integer y-offsets.
   const ys = max(fy1, 0)
   const ye = min(fy2, 127)
@@ -597,7 +658,7 @@ function polygon_edge(
   return [ys, ye]
 }
 
-// note: polygon must be convex. concave polygons draw artifacts.
+// Note: polygon must be convex. Concave polygons draw artifacts.
 function polygon_draw(p: polygon): void {
   const points = p.points_screen
   const xl: NumberMap = {},
@@ -624,125 +685,21 @@ function polygon_draw(p: polygon): void {
   }
 }
 
-//// copy data from screen to spritesheet.
-//// note: offset should be even.
-//// note: odd x1 values will copy an extra column of pixels on the left.
-//// example: if x1==5, then you will copy pixel 4 and pixel 5.
-//function copy_to_spritesheet(
-//  x1: number,
-//  y1: number,
-//  x2: number,
-//  y2: number,
-//  offset: number
-//): void {
-//  const width = x2 - x1 + 1
-//  for (let i = y1; i <= y2; i++) {
-//    // copy row by row.
-//    memcpy(
-//      (i - y1) * 64 + offset / 2, // one row of pixels is 64 bytes.
-//      0x6000 + i * 64 + x1 / 2,
-//      ceil(width / 2) + 1 // copy pixels, +1 column for good measure.
-//    )
-//  }
-//}
-//
-//// (x1,y1) is the top-left corner of the shadow.
-//function shadow_draw(
-//  spx: number,
-//  spy: number,
-//  spw: number,
-//  sph: number,
-//  x1: number,
-//  y1: number
-//): void {
-//  // bottom-right corner. never extends beyond bottom-right point.
-//  const x2 = min(x1 + spw, 128)
-//  const y2 = min(y1 + sph, 128)
-//
-//  const on_screen = !(false || x2 < 0 || x1 > 127 || y2 < 0 || y1 > 127)
-//
-//  if (!on_screen) {
-//    return
-//  }
-//
-//  const x1_min = max(x1, 0)
-//  const y1_min = max(y1, 0)
-//
-//  const draw_width = x2 - x1_min
-//  const draw_height = y2 - y1_min
-//
-//  // copy original area to spritesheet.
-//  copy_to_spritesheet(x1_min, y1_min, x2, y2, 0)
-//
-//  // draw mask to screen.
-//  // shadow is transparent, black part is not
-//  palt(col.black, false)
-//  palt(col.dark_blue, true)
-//  sspr(spx, spy, spw, sph, x1, y1, spw, sph)
-//
-//  // copy original area with black border to spritesheet.
-//  copy_to_spritesheet(x1_min, y1_min, x2, y2, 14)
-//
-//  // draw copied area to screen
-//  palt()
-//  sspr(
-//    x1_min % 2,
-//    0,
-//    draw_width,
-//    draw_height,
-//    x1_min,
-//    y1_min,
-//    draw_width,
-//    draw_height
-//  )
-//
-//  // perform some palette swaps
-//  pal(3, 1)
-//  pal(6, 5)
-//  pal(13, 1)
-//
-//  // draw original region with mask
-//  // remember, black is transparent
-//  sspr(
-//    14 + (x1_min % 2),
-//    0,
-//    draw_width,
-//    draw_height,
-//    x1_min,
-//    y1_min,
-//    draw_width,
-//    draw_height
-//  )
-//
-//  // reset palette state
-//  pal()
-//}
-//
-//let player_draw: (p: player) => void
-//{
-//  const spare = vec3()
-//  player_draw = function(p: player): void {
-//    cam_project(p.cam, spare, p.pos)
-//    shadow_draw(0, 8, 12, 7, round(spare.x), round(spare.y))
-//    // pset(round(spare.x), round(spare.y), colors_pink)
-//  }
-//}
-
 /**
- * --> 3. camera.
+ * Camera.
  */
 
-interface cam {
-  pos: vec3
+interface Camera extends Actor {
+  pos: Vec3
   x_angle: number
-  mx: mat3
+  mx: Mat3
   y_angle: number
-  my: mat3
+  my: Mat3
   dist: number
   fov: number
 }
 
-function cam(): cam {
+function cam(): Camera {
   return {
     pos: vec3(),
     x_angle: 0,
@@ -751,10 +708,16 @@ function cam(): cam {
     my: mat3(),
     dist: 7 * 10,
     fov: 150,
+    update: cam_update,
+    draw: cam_draw,
   }
 }
 
-function cam_project(c: cam, out: vec3, v: vec3): void {
+function cam_update(c: Camera): void { }
+
+function cam_draw(c: Camera): void { }
+
+function cam_project(c: Camera, out: Vec3, v: Vec3): void {
   // world to view.
   vec3_sub(out, v, c.pos)
 
@@ -781,261 +744,161 @@ function cam_project(c: cam, out: vec3, v: vec3): void {
 }
 
 /**
- * -->8 4. game.
+ * Game.
  */
 
-interface game {
-  court_lines: Array<line>
-  net_lines: Array<line>
-  cam: cam
-  court: polygon
-  player: Player
-  opponent: Player
+interface Game extends Actor {
+  court: Court
   ball: Ball
-  zero_vec: vec3
+
   post_rally_timer: number
-  player_score: number
-  opponent_score: number
-  net: Net
+  left_side_score: number
+  right_side_score: number
+
+  state: state
+  next_state: state
+  server?: Player
+
+  mouse_x: number
+  mouse_y: number
 }
 
-function game(): game {
-  const court_lines = read_lines()
-  const net_lines = read_lines()
-
-  const s = 6
-  const c = cam()
-  c.dist = 12 * s
-  c.fov = 34 * s
-  c.x_angle = -0.08
-  c.pos.y = -0.5 * s
-
-  const p = polygon(col.dark_green, c, [
-    vec3(-3.8 * s, 0, -7.7 * s),
-    vec3(-3.8 * s, 0, 7.7 * s),
-    vec3(3.8 * s, 0, 7.7 * s),
-    vec3(3.8 * s, 0, -7.7 * s),
-  ])
-
-  const n = net(net_lines)
-  const b = ball(c, n)
-
-  /*
-  var [collides, intersection] = net_collides_with(
-    n,
-    vec3(0, 1.6 * meter_unit, -1 * meter_unit),
-    vec3(0, 1.6 * meter_unit, -2 * meter_unit)
-  )
-  assert(!collides, 'does not collide')
-  var [collides, intersection] = net_collides_with(
-    n,
-    vec3(-5 * meter_unit, 1.2 * meter_unit, -1 * meter_unit),
-    vec3(-7 * meter_unit, 1.2 * meter_unit, 1 * meter_unit)
-  )
-  assert(!collides, 'does not collide')
-  var [collides, intersection] = net_collides_with(
-    n,
-    vec3(-3 * meter_unit, 1.2 * meter_unit, -1 * meter_unit),
-    vec3(3 * meter_unit, 1.2 * meter_unit, 1 * meter_unit)
-  )
-  assert(collides, 'collides')
-  if (intersection) vec3_print(intersection)
-  stop()
-  */
-
-  const player_user = player(
-    c,
-    b,
-    -0.5 * meter_unit,
-    0,
-    5 * meter_unit,
-    player_keyboard_input,
-    vec3(-2.59 * meter_unit, 0, 0.5 * meter_unit),
-    vec3(2.59 * meter_unit, 0, 6.7 * meter_unit),
-    -1
-  )
-
-  const game_instance = {
-    court_lines: court_lines,
-    net_lines: net_lines,
-    cam: c,
-    court: p,
-    player: player_user,
-    opponent: player(
-      c,
-      b,
-      -0.5 * meter_unit,
-      0,
-      -5 * meter_unit,
-      player_ai,
-      vec3(-2.59 * meter_unit, 0, -6.7 * meter_unit),
-      vec3(2.59 * meter_unit, 0, -0.5 * meter_unit),
-      1
-    ),
+function game(c: Court, b: Ball): Game {
+  return {
+    update: game_update,
+    draw: game_draw,
+    court: c,
     ball: b,
-    zero_vec: vec3(),
     post_rally_timer: 0,
-    player_score: 0,
-    opponent_score: 0,
-    net: n,
-    server: player_user,
-  }
-
-  server = player_user
-  return game_instance
-}
-
-function game_update(g: game): void {
-  polygon_update(g.court)
-  player_update(g.player)
-  player_update(g.opponent)
-  ball_update(g.ball)
-
-  // update post rally timer
-  if (g.post_rally_timer > 0) {
-    g.post_rally_timer -= 1
-    if (g.post_rally_timer === 0) {
-      next_game_state = game_state.serve
-    }
-  } else {
-    // printh('wtf', 'test.log')
-  }
-
-  // set timer
-  if (
-    current_game_state === game_state.playing &&
-    next_game_state === game_state.post_rally
-  ) {
-    g.post_rally_timer = 3 * 60
-  }
-
-  if (
-    // about to transition to post rally state
-    current_game_state === game_state.playing &&
-    next_game_state === game_state.post_rally
-  ) {
-    // TODO: check if ball is in valid hit region.
-    if (
-      g.ball.pos.x > -3.05 * 6 &&
-      g.ball.pos.x < 3.05 * 6 &&
-      g.ball.pos.z < 0 * 6 &&
-      g.ball.pos.z > -6.7 * 6
-    ) {
-      // then we're in a valid hit region.
-      // add to player score
-      g.player_score += 1
-    } else {
-      g.opponent_score += 1
-    }
-
-    // TODO: display score
+    left_side_score: 0,
+    right_side_score: 1,
+    state: state.pre_serve,
+    next_state: state.pre_serve,
+    mouse_x: 0,
+    mouse_y: 0,
   }
 }
 
-type DrawFunction = (g: game) => void
-let order: Array<[vec3, DrawFunction]> = []
-function game_draw(g: game): void {
-  polygon_draw(g.court)
+function game_update(g: Game): void {
+  // Update state. This should come first.
+  g.state = g.next_state
 
-  for (let i = 0; i < g.court_lines.length; i++) {
-    const l = g.court_lines[i]
-    line_draw(l, g.cam)
-  }
+  // Update mouse input. This is temporary.
+  g.mouse_x = stat(32)
+  g.mouse_y = stat(33)
+}
 
-  clear_order()
-  insert_into_order(g.zero_vec, game_draw_net)
-  insert_into_order(g.player.pos, game_draw_player)
-  insert_into_order(g.opponent.pos, game_draw_opponent)
-  insert_into_order(g.ball.pos, game_draw_ball)
+function game_draw(g: Game): void {
+  /**
+   * Draw score.
+   */
 
-  for (let i = 0; i < order.length; i++) {
-    order[i][1](g)
-  }
-
-  //print(current_game_state)
-  //print(g.post_rally_timer)
-  const str = g.player_score + ' - ' + g.opponent_score
+  const str = g.left_side_score + ' - ' + g.right_side_score
   print(str, 64 - str.length * 2, 3, col.white)
 }
 
-function game_draw_net(g: game): void {
-  for (let i = 0; i < g.net_lines.length; i++) {
-    const l = g.net_lines[i]
-    line_draw(l, g.cam)
-  }
-}
-function game_draw_player(g: game): void {
-  player_draw(g.player)
-}
-function game_draw_opponent(g: game): void {
-  player_draw(g.opponent)
-}
-function game_draw_ball(g: game): void {
-  ball_draw(g.ball)
-}
+/**
+ * Player side.
+ *
+ * (The sides are kinda arbitrary.)
+ */
 
-function clear_order(): void {
-  order = []
-}
-
-function insert_into_order(pos: vec3, draw_fn: (g: game) => void): void {
-  for (let i = 0; i < order.length; i++) {
-    const current = order[i]
-    if (pos.z < current[0].z) {
-      // move everything 1 over
-      for (let j = order.length - 1; j >= i; j--) {
-        order[j + 1] = order[j]
-      }
-
-      // then insert
-      // TODO: memory allocation, not super important though
-      order[i] = [pos, draw_fn]
-      return
-    }
-  }
-  add(order, [pos, draw_fn])
+enum player_side {
+  left,
+  right,
 }
 
 /**
- * --> 5. player.
+ * Player stance.
+ *
+ * Assume that all players are righties.
  */
 
-interface Player {
-  scale: number
-  pos: vec3
-  vel: vec3
-  vel60: vec3
-  acc: vec3
+enum PlayerStance {
+  Forehand,
+  Backhand,
+}
+
+/**
+ * Swing state.
+ */
+
+enum SwingState {
+  Idle,
+  Winding,
+}
+
+/**
+ * Player.
+ */
+
+interface Player extends Actor {
+  // Dependencies.
+  cam: Camera
+  ball: Ball // Deprecated.
+  game: Game
+
+  // Position.
+  pos: Vec3
+  screen_pos: Vec3
+
+  // Velocity.
+  vel: Vec3
+  vel60: Vec3
+
+  // Acceleration.
+  acc: Vec3
   desired_speed: number
-  screen_pos: vec3
-  cam: cam
-  ball: Ball
-  spare: vec3
-  up: vec3
-  hit: boolean
-  player_to_ball: vec3
-  swing_time: number
   input_method: (p: Player) => void
-  upper_left_bound: vec3
-  lower_right_bound: vec3
+
+  // Player side.
+  //
+  // The sides are kinda arbitrary, but are still named
+  // "left" and "right".
+  player_side: player_side
+
+  // Is the player facing the -z, or z direction?
   player_dir: -1 | 1
+
+  // Forehand or backhand?
+  player_stance: PlayerStance
+
+  // Swing-related properties.
+  swing_state: SwingState
+  wind_up_condition: (p: Player) => boolean
+  swing2_condition: (p: Player) => boolean
+  swing_power: number
+
+  // Exploratory.
+  arm_points: [Vec3, Vec3, Vec3]
+  arm_screen_points: [Vec3, Vec3, Vec3]
+
+  // Spare vectors.
+  spare: Vec3
+  up: Vec3
+  player_to_ball: Vec3
 }
 
 function player(
-  c: cam,
+  c: Camera,
   b: Ball,
   x: number,
   y: number,
   z: number,
   input_method: (p: Player) => void,
-  upper_left_bound: vec3,
-  lower_right_bound: vec3,
-  player_dir: -1 | 1
+  upper_left_bound: Vec3,
+  lower_right_bound: Vec3,
+  player_dir: -1 | 1,
+  game: Game,
+  is_initial_server: boolean,
+  player_side: player_side,
+  swing_condition: (p: Player) => boolean,
+  wind_up_condition: (p: Player) => boolean
 ): Player {
-  const meter = 6
+  const points: [Vec3, Vec3, Vec3] = [vec3(), vec3(), vec3()]
+  const more_points: [Vec3, Vec3, Vec3] = [vec3(), vec3(), vec3()]
 
-  return {
-    scale: meter,
+  const p = {
     pos: vec3(x, y, z),
     vel: vec3(),
     vel60: vec3(),
@@ -1046,14 +909,45 @@ function player(
     ball: b,
     spare: vec3(),
     up: vec3(0, 1, 0),
-    hit: false,
     player_to_ball: vec3(),
     swing_time: 0,
     input_method: input_method,
-    upper_left_bound: upper_left_bound,
-    lower_right_bound: lower_right_bound,
     player_dir: player_dir,
+    swing_condition: swing_condition,
+    game: game,
+    update: player_update,
+    draw: player_draw,
+    player_side: player_side,
+    player_stance: PlayerStance.Forehand,
+    swing_state: SwingState.Idle,
+    swing2_condition: swing_condition,
+    wind_up_condition: wind_up_condition,
+    arm_points: points,
+    arm_screen_points: more_points,
+    swing_power: 0,
   }
+
+  if (is_initial_server) {
+    game.server = p
+  }
+
+  return p
+}
+
+function player_human_wind_up(p: Player): boolean {
+  return false
+}
+
+function player_human_swing(p: Player): boolean {
+  return false
+}
+
+function player_cpu_wind_up(p: Player): boolean {
+  return false
+}
+
+function player_cpu_swing(p: Player): boolean {
+  return false
 }
 
 function player_keyboard_input(p: Player): void {
@@ -1064,86 +958,26 @@ function player_keyboard_input(p: Player): void {
 }
 
 function player_ai(p: Player): void {
-  // move in direction of ball
-  vec3_zero(p.acc)
-  vec3_sub(p.acc, p.ball.pos, p.pos)
-  p.acc.y = 0
+  /**
+   * Move in direction of ball.
+   */
 
-  // if ball is in range, swing
+  vec3_zero(p.acc)
+
+  /**
+   * Compute `player_to_ball` vector.
+   */
+
+  /**
+   * If ball is in range, swing.
+   */
 }
 
 function player_swing(p: Player): void {
-  /**
-   * Compute `player_to_ball` vector.
-   *
-   * Note: player's chest is 1m above the ground.
-   */
-
-  vec3_sub(p.player_to_ball, p.ball.pos, p.pos)
-  p.player_to_ball.y += 1 * meter_unit
-
-  /**
-   * Compute swing pre-condition.
-   *
-   * Condition: ball is in-range.
-   * Condition: ball is still in air.
-   * Condition: not currently swinging.
-   * Condition: pressed the swing button.
-   */
-
-  if (
-    !(
-      vec3_magnitude(p.player_to_ball) < 2.5 * meter_unit &&
-      p.ball.pos.y > 0 &&
-      p.swing_time < 0.1 &&
-      btn(button.z)
-    )
-  ) {
-    return
-  }
-
-  /**
-   * Enter a swing state.
-   */
-
-  p.swing_time = 1 * second
-
-  /**
-   * Right-side lob.
-   *
-   * Condition: ball is below 1m.
-   * Condition: ball is on right side.
-   * Condition: ball is in front of player.
-   */
-
-  if (
-    p.ball.pos.y < 1 * meter_unit &&
-    p.player_to_ball.x > 0 &&
-    p.player_to_ball.z <= 1
-  ) {
-    // Slap `up` vector into `player_to_ball` vector.
-    vec3_cross(p.spare, p.up, p.player_to_ball)
-
-    // Add some forward velocity.
-    p.spare.z += 6 * meter_unit
-
-    // Add some upward velocity.
-    // The lower the ball, the greater the upward velocity.
-    p.spare.y += 50 + (1 * meter_unit - p.ball.pos.y) * 5
-
-    // Add velocity to ball velocity.
-    vec3_add(p.ball.vel, p.ball.vel, p.spare)
-  }
-
-  // TODO: Left-side lob.
-  // TODO: Left overhead.
-  // TODO: Right overhead.
+  // TODO.
 }
 
-function player_update(p: Player): void {
-  // temporary hit variable
-  p.hit = false
-
+function player_move(p: Player): void {
   /**
    * Compute acceleration.
    *
@@ -1151,7 +985,19 @@ function player_update(p: Player): void {
    */
 
   vec3_zero(p.acc)
-  p.input_method(p)
+  // p.input_method(p)
+
+  /**
+   * Compute player stance.
+   */
+
+  if (p.acc.x > 0) {
+    p.player_stance = PlayerStance.Forehand
+  }
+
+  if (p.acc.x < 0) {
+    p.player_stance = PlayerStance.Backhand
+  }
 
   /**
    * Normalize & scale acceleration.
@@ -1179,154 +1025,251 @@ function player_update(p: Player): void {
    * Bounds checking.
    */
 
-  if (p.pos.x < p.upper_left_bound.x) p.pos.x = p.upper_left_bound.x
-  if (p.pos.x > p.lower_right_bound.x) p.pos.x = p.lower_right_bound.x
+  if (p.game.state === state.pre_serve) {
+    const side = p.player_side
+    let player_score: number
+    let opponent_score: number
 
-  if (p.pos.z < p.upper_left_bound.z) p.pos.z = p.upper_left_bound.z
-  if (p.pos.z > p.lower_right_bound.z) p.pos.z = p.lower_right_bound.z
+    if (side === player_side.left) {
+      player_score = p.game.left_side_score
+      opponent_score = p.game.right_side_score
+    } else {
+      player_score = p.game.right_side_score
+      opponent_score = p.game.left_side_score
+    }
+
+    if (p.game.server === p) {
+      if (player_score % 2 === 0) {
+        player_bounds_check(p, p.game.court.singles_even_bounds)
+      } else {
+        player_bounds_check(p, p.game.court.singles_odd_bounds)
+      }
+    } else {
+      if (opponent_score % 2 === 0) {
+        player_bounds_check(p, p.game.court.singles_odd_bounds)
+      } else {
+        player_bounds_check(p, p.game.court.singles_even_bounds)
+      }
+    }
+  }
 
   /**
    * Update screen position.
    */
 
   cam_project(p.cam, p.screen_pos, p.pos)
+}
+
+function player_bounds_check(p: Player, bounds: [Vec3, Vec3]): void {
+  const upper_left_bound = bounds[0]
+  const lower_right_bound = bounds[1]
+
+  if (p.pos.x < upper_left_bound.x) {
+    p.pos.x = upper_left_bound.x
+  }
+
+  if (p.pos.x > lower_right_bound.x) {
+    p.pos.x = lower_right_bound.x
+  }
+
+  if (p.player_dir === -1 && p.pos.z < upper_left_bound.z) {
+    p.pos.z = upper_left_bound.z
+  }
+
+  if (p.player_dir === -1 && p.pos.z > lower_right_bound.z) {
+    p.pos.z = lower_right_bound.z
+  }
+
+  if (p.player_dir === 1 && p.pos.z > -upper_left_bound.z) {
+    p.pos.z = -upper_left_bound.z
+  }
+
+  if (p.player_dir === 1 && p.pos.z < -lower_right_bound.z) {
+    p.pos.z = -lower_right_bound.z
+  }
+}
+
+function player_move_ball(p: Player): void {
+  // Make ball kinematic.
+  p.game.ball.is_kinematic = true
+
+  // Update ball's position.
+  vec3_assign(p.game.ball.pos, p.pos)
+  p.game.ball.pos.y += 1 * meter
 
   /**
-   * units.
+   * Place ball on player's forehand or backhand side.
    */
 
-  const second = 60
+  if (p.player_stance === PlayerStance.Forehand) {
+    p.game.ball.pos.x += 0.5 * meter
+  }
+
+  if (p.player_stance === PlayerStance.Backhand) {
+    p.game.ball.pos.x -= 0.5 * meter
+  }
+
+  p.game.ball.pos.z += p.player_dir * 0.1 * meter
+}
+
+function player_update(p: Player): void {
+  /**
+   * Prior to serve.
+   */
+
+  if (p.game.state === state.pre_serve) {
+    // TODO: temporary, move ball around using arrow keys and z and x
+    if (p.game.server === p) {
+      const racket_head = p.arm_points[2]
+      if (btn(button.up)) {
+        racket_head.y += 0.05 * meter
+      }
+      if (btn(button.down)) {
+        racket_head.y -= 0.05 * meter
+      }
+      if (btn(button.left)) {
+        racket_head.x -= 0.05 * meter
+      }
+      if (btn(button.right)) {
+        racket_head.x += 0.05 * meter
+      }
+      if (btn(button.z)) {
+        racket_head.z -= 0.05 * meter
+      }
+      if (btn(button.x)) {
+        racket_head.z += 0.05 * meter
+      }
+      cam_project(p.cam, p.arm_screen_points[2], racket_head)
+
+      const socket = p.arm_screen_points[0]
+      const wrist = p.arm_screen_points[1]
+      // const racket_head = p.arm_screen_points[2]
+
+      let target = racket_head
+      const spare = vec3()
+
+      vec3_sub(spare, racket_head, socket)
+      let [new_head, new_tail] = reach(racket_head, wrist, target, 0.5 * meter)
+      p.arm_points[0] = new_head
+      target = new_tail
+
+      vec3_sub(spare, wrist, socket)
+      let [new_head2, new_tail2] = reach(wrist, socket, wrist, 0.5 * meter)
+      p.arm_points[1] = new_head2
+      target = new_tail2
+
+      p.arm_points[2] = socket
+
+      // update screen points.
+      for (let i = 0; i < 3; i++) {
+        cam_project(p.cam, p.arm_screen_points[i], p.arm_points[i])
+      }
+
+      //print('processed input')
+      //stop()
+      return
+    }
+
+    return
+
+    if (btn(button.x)) {
+      // Make ball be affected by gravity again.
+      p.game.ball.is_kinematic = false
+
+      // Set next state.
+      p.game.next_state = state.serving
+    }
+
+    if (btn(button.z) && p.player_stance === PlayerStance.Backhand) {
+      // Make ball be affected by gravity again.
+      p.game.ball.is_kinematic = false
+
+      // Set next state.
+      p.game.next_state = state.serving
+
+      // Set swing state.
+      p.swing_state = SwingState.Winding
+    }
+
+    player_move(p)
+    if (p.game.server === p) {
+      player_move_ball(p)
+    }
+    // Move arm afterward, since it depends
+    // on ball's location.
+    player_move_arm(p)
+
+    return
+  }
 
   /**
-   * TODO: handle ball serve
+   * Serve.
    */
 
-  p.ball.is_kinematic = current_game_state === game_state.serve
-  if (current_game_state === game_state.serve && server === p) {
-    p.ball.pos.x = p.pos.x + 0.4 * meter_unit
-    p.ball.pos.y = p.pos.y + 1.0 * meter_unit
-    p.ball.pos.z = p.pos.z
+  if (p.game.state === state.serving) {
+    // If we are in a winding state,
+    // increase swing power.
+    // Remember to reset serve power later!
+    if (p.swing_state === SwingState.Winding && btn(button.z)) {
+      p.swing_power += 1 * (1 / 60)
+      return
+    }
 
-    if (btn(button.z)) {
-      // release ball
-      p.ball.is_kinematic = false
-
-      // give ball upward velocity
-      p.ball.vel.x = 0
-      p.ball.vel.y = 5 * meter_unit
-      p.ball.vel.z = 0
-
-      // change state to playing
-      next_game_state = game_state.playing
-
-      // set swing time
-      p.swing_time = 1 * second
+    if (p.swing_state === SwingState.Winding && !btn(button.z)) {
+      p.swing_state = SwingState.Idle
+      return
+      // TODO: Swing.
     }
 
     return
   }
 
   /**
-   * Update swing state.
+   * Rally.
    */
 
-  p.swing_time = max(p.swing_time - 1, 0)
+  if (p.game.state === state.rally) {
+    return
+  }
 
   /**
-   * Swing at ball.
+   * Post-rally.
    */
 
-  const meter = 6
-
-  // player's chest is ~1m above the ground
-  vec3_sub(p.player_to_ball, p.ball.pos, p.pos)
-  p.player_to_ball.y += 1 * meter
-  if (
-    vec3_magnitude(p.player_to_ball) < 2.5 * meter && // ball in range
-    p.ball.pos.y > 0 && // ball is still in air
-    p.swing_time < 0.1 && // not currently swinging
-    btn(button.z) // pressed the swing button
-  ) {
-    // enter a swing state
-    p.hit = true
-    p.swing_time = 1 * second
-
-    // TODO: consider different hit regions
-
-    // TODO: handle right side lob
-    // condition: below 1m
-    // condition: x > 0.2
-    if (
-      p.ball.pos.y < 1 * meter &&
-      p.player_to_ball.x > 0 * meter &&
-      p.player_to_ball.z <= 1
-    ) {
-      printh('right side lob', 'test.log')
-      // execute right side lob:
-      // slap up vector into player_to_ball vector
-      vec3_cross(p.spare, p.up, p.player_to_ball)
-      // depending on ball's dist from 1m, add to vertical velocity
-      p.spare.z -= 50
-      p.spare.y += (1 * meter - p.ball.pos.y) * 5 + 50
-      // add velocity to ball velocity
-      vec3_add(p.ball.vel, p.ball.vel, p.spare)
-      vec3_printh(p.spare)
-    }
-
-    // TODO: handle left side lob
-    if (
-      p.ball.pos.y < 1 * meter &&
-      p.player_to_ball.x < 0 * meter &&
-      p.player_to_ball.z <= 1
-    ) {
-      //printh('left side lob', 'test.log')
-      // execute right side lob:
-      // slap up vector into player_to_ball vector
-      vec3_cross(p.spare, p.player_to_ball, p.up)
-      // depending on ball's dist from 1m, add to vertical velocity
-      p.spare.z -= 50
-      p.spare.y += (1 * meter - p.ball.pos.y) * 5 + 50
-      // add velocity to ball velocity
-      vec3_add(p.ball.vel, p.ball.vel, p.spare)
-      //vec3_printh(p.spare)
-    }
-
-    // TODO: handle left overhead hit
-    if (
-      p.ball.pos.y >= 1 * meter &&
-      p.player_to_ball.z <= 1 &&
-      p.player_to_ball.x < 0 * meter
-    ) {
-      //printh('left overhead hit', 'test.log')
-      vec3_cross(p.spare, p.player_to_ball, p.up)
-      p.spare.z -= 50 * 3
-      p.spare.y += 10
-      //p.spare.y -= 10
-      vec3_add(p.ball.vel, p.ball.vel, p.spare)
-    }
-
-    // TODO: handle right overhead hit
-    if (
-      p.ball.pos.y >= 1 * meter &&
-      p.player_to_ball.z <= 1 &&
-      p.player_to_ball.x > 0 * meter
-    ) {
-      //printh('right overhead hit', 'test.log')
-      vec3_cross(p.spare, p.up, p.player_to_ball)
-      p.spare.z -= 50 * 3
-      p.spare.y += 10
-      vec3_add(p.ball.vel, p.ball.vel, p.spare)
-    }
+  if (p.game.state === state.post_rally) {
+    return
   }
+
+  return
+}
+
+function player_move_arm(p: Player): void {
+  // Update socket point.
+  const socket = p.arm_points[0]
+  socket.x = p.pos.x + 0.3 * meter * -p.player_dir
+  socket.y = p.pos.y + 1 * meter
+  socket.z = p.pos.z
+
+  // Update racket head point.
+  const racket_head = p.arm_points[2]
+  racket_head.x = p.ball.pos.x
+  racket_head.y = p.ball.pos.y
+  racket_head.z = p.ball.pos.z
+
+  // Update screen points.
+  cam_project(p.cam, p.arm_screen_points[0], socket)
+  cam_project(p.cam, p.arm_screen_points[2], racket_head)
 }
 
 function player_draw(p: Player): void {
   const width = 10
   const height = 25
+  const arm_height = 15
 
-  // draw shadow
+  // Draw shadow.
   circfill(round(p.screen_pos.x), round(p.screen_pos.y), 3, col.dark_blue)
 
+  // Draw player.
   rectfill(
     round(p.screen_pos.x - width / 2),
     round(p.screen_pos.y - height),
@@ -1335,117 +1278,133 @@ function player_draw(p: Player): void {
     col.orange
   )
 
-  //print('hit:')
-  //print(p.hit)
+  //
+  // Draw player arm.
+  //
+
+  // Socket.
+  const socket = p.arm_screen_points[0]
+  circfill(socket.x, socket.y, 1, col.orange)
+
+  // Wrist.
+  const wrist = p.arm_screen_points[1]
+  circfill(wrist.x, wrist.y, 1, col.peach)
+
+  // Racket head.
+  const racket_head = p.arm_screen_points[2]
+  circfill(racket_head.x, racket_head.y, 1, col.pink)
 }
 
 /**
- * --> 6. ball.
+ * Ball.
  */
 
-interface Ball {
-  pos: vec3
-  shadow_pos: vec3
-  vel: vec3
-  vel60: vec3
-  acc: vec3
-  acc60: vec3
-  screen_pos: vec3
-  screen_shadow_pos: vec3
-  cam: cam
-  is_kinematic: boolean
+interface Ball extends Actor {
+  // Position.
+  pos: Vec3
+  shadow_pos: Vec3
+  screen_pos: Vec3
+  screen_shadow_pos: Vec3
+
+  // Velocity.
+  vel: Vec3
+  vel60: Vec3
+
+  // Acceleration.
+  acc: Vec3
+
+  // Dependencies.
+  cam: Camera
   net: Net
-  intersects: boolean
+
+  // State.
+  is_kinematic: boolean
+
+  // Spare vec3's for computation.
+  spare: Vec3
+  next_pos: Vec3
 }
 
-function ball(c: cam, n: Net): Ball {
-  const meter = 6
-
+function ball(c: Camera, n: Net): Ball {
   return {
     pos: vec3(0, 3 * meter, 5 * meter),
     shadow_pos: vec3(),
     vel: vec3(0, 1 * meter, 0),
     vel60: vec3(),
     acc: vec3(0, -10 * meter, 0),
-    acc60: vec3(),
     screen_pos: vec3(),
     screen_shadow_pos: vec3(),
     cam: c,
     is_kinematic: false,
     net: n,
-    intersects: false,
+    update: ball_update,
+    draw: ball_draw,
+    spare: vec3(),
+    next_pos: vec3(),
   }
 }
 
-declare var ball_update: (b: Ball) => void
-{
-  const spare = vec3()
-  const next_pos = vec3()
-  ball_update = (b: Ball): void => {
-    if (!b.is_kinematic && b.pos.y > 0) {
-      // compute change in velocity for this frame.
-      vec3_assign(spare, b.acc)
-      vec3_scale(spare, 1 / 60)
+function ball_update(b: Ball): void {
+  if (!b.is_kinematic && b.pos.y > 0) {
+    // Compute change in velocity for this frame.
+    vec3_assign(b.spare, b.acc)
+    vec3_scale(b.spare, 1 / 60)
 
-      // apply change in velocity.
-      vec3_add(b.vel, b.vel, spare)
+    // Apply change in velocity.
+    vec3_add(b.vel, b.vel, b.spare)
 
-      // compute change in position for this frame.
-      vec3_assign(spare, b.vel)
-      vec3_scale(spare, 1 / 60)
+    // Compute change in position for this frame.
+    vec3_assign(b.spare, b.vel)
+    vec3_scale(b.spare, 1 / 60)
 
-      // TODO
-      // check if there is an intersection
-      vec3_zero(next_pos)
-      vec3_add(next_pos, b.pos, spare)
-      const [intersects, intersection] = net_collides_with(
-        b.net,
-        b.pos,
-        next_pos
-      )
-      b.intersects = intersects
-      if (intersects && intersection) {
-        // if in front of net
-        b.pos.x = intersection.x
-        b.pos.y = intersection.y
-        if (b.pos.z > 0) {
-          // set position to slightly in front of net
-          b.pos.z = 1
-        } else if (b.pos.z < 0) {
-          // set position to slightly behind net
-          b.pos.z = -1
-        } else {
-          assert(false)
-        }
-        // reverse z-component of velocity
-        b.vel.z = -b.vel.z
-        vec3_scale(b.vel, 0.1)
+    // Compute next position.
+    vec3_zero(b.next_pos)
+    vec3_add(b.next_pos, b.pos, b.spare)
+
+    // Check if there is an intersection.
+    const [intersects, intersection] = net_collides_with(
+      b.net,
+      b.pos,
+      b.next_pos
+    )
+
+    if (intersects && intersection) {
+      // Set ball's position to intersection point.
+      b.pos.x = intersection.x
+      b.pos.y = intersection.y
+
+      if (b.pos.z > 0) {
+        // Set position to slightly in front of net.
+        b.pos.z = 1
+      } else if (b.pos.z < 0) {
+        // Set position to slightly behind net.
+        b.pos.z = -1
       } else {
-        vec3_assign(spare, b.vel)
-        vec3_scale(spare, 1 / 60)
-
-        // apply change in position.
-        vec3_add(b.pos, b.pos, spare)
-
-        // TODO: temporary
-        // b.pos.y = 1.2 * meter_unit
+        // Throw exception, this should mostly never happen.
+        assert(false)
       }
+
+      // Reverse z-component of velocity, scaled down a little.
+      b.vel.z = -b.vel.z
+      vec3_scale(b.vel, 0.1)
+    } else {
+      // Apply change in position.
+      vec3_add(b.pos, b.pos, b.spare)
     }
-
-    // bounds check.
-    if (b.pos.y < 0) {
-      b.pos.y = 0
-      next_game_state = game_state.post_rally
-    }
-
-    // compute new screen position.
-    cam_project(b.cam, b.screen_pos, b.pos)
-
-    // compute new screen position for shadow
-    vec3_assign(b.shadow_pos, b.pos)
-    b.shadow_pos.y = 0
-    cam_project(b.cam, b.screen_shadow_pos, b.shadow_pos)
   }
+
+  // Bounds check.
+  if (b.pos.y < 0) {
+    b.pos.y = 0
+  }
+
+  // Compute new screen position.
+  cam_project(b.cam, b.screen_pos, b.pos)
+
+  // Compute new screen position for shadow.
+  vec3_assign(b.shadow_pos, b.pos)
+  b.shadow_pos.y = 0
+  cam_project(b.cam, b.screen_shadow_pos, b.shadow_pos)
 }
 
 function ball_draw(b: Ball): void {
@@ -1459,43 +1418,49 @@ function ball_draw(b: Ball): void {
 
   // draw ball
   circfill(round(b.screen_pos.x), round(b.screen_pos.y), 1, col.yellow)
-
-  //print(b.is_kinematic)
-  //vec3_print(b.pos)
-  //vec3_print(b.vel)
-  //vec3_print(b.acc)
-  //print('intersects:')
-  //print(b.intersects)
 }
 
 /**
- * -->8 7. net.
+ * Net.
  */
 
-interface Net {
+interface Net extends Actor {
   lines: Array<line>
   net_top: number
   net_bottom: number
   left_pole: number
   right_pole: number
+  cam: Camera
 }
 
-function net(lines: Array<line>): Net {
+function net(lines: Array<line>, cam: Camera): Net {
   return {
     lines: lines,
-    net_top: 1.5 * meter_unit,
-    net_bottom: 0.9 * meter_unit,
-    left_pole: -2.95 * meter_unit,
-    right_pole: 2.95 * meter_unit,
+    net_top: 1.5 * meter,
+    net_bottom: 0.9 * meter,
+    left_pole: -2.95 * meter,
+    right_pole: 2.95 * meter,
+    cam: cam,
+    update: net_update,
+    draw: net_draw,
+  }
+}
+
+function net_update(n: Net): void { }
+
+function net_draw(n: Net): void {
+  for (let i = 0; i < n.lines.length; i++) {
+    const l = n.lines[i]
+    line_draw(l, n.cam)
   }
 }
 
 /** !TupleReturn */
 function net_collides_with(
   n: Net,
-  prev_pos: vec3,
-  next_pos: vec3
-): [true, vec3] | [false, null] {
+  prev_pos: Vec3,
+  next_pos: Vec3
+): [true, Vec3] | [false, null] {
   if (
     !((prev_pos.z > 0 && next_pos.z < 0) || (prev_pos.z < 0 && next_pos.z > 0))
   ) {
@@ -1519,7 +1484,6 @@ function net_collides_with(
 
   // z = m2*y + z0, set z to 0 and solve for y
   const m2 = (next_pos.z - prev_pos.z) / (next_pos.y - prev_pos.y)
-  //printh('m2:' + m2, 'test.log')
   const y = -z0 / m2
   const y_at_net = prev_pos.y + y
   const y_in_range = n.net_bottom <= y_at_net && y_at_net < n.net_top
@@ -1527,8 +1491,59 @@ function net_collides_with(
     return [false, null]
   }
 
-  //printh('collides', 'test.log')
-  //vec3_printh(prev_pos)
-  //vec3_printh(next_pos)
   return [true, vec3(x_at_net, y_at_net, 0)]
+}
+
+/**
+ * Court.
+ */
+
+interface Court extends Actor {
+  cam: Camera
+  court_lines: Array<line>
+  poly: polygon
+  singles_even_bounds: [Vec3, Vec3]
+  singles_odd_bounds: [Vec3, Vec3]
+}
+
+function court(court_lines: Array<line>, cam: Camera): Court {
+  const p = polygon(col.dark_green, cam, [
+    vec3(-3.8 * meter, 0, -7.7 * meter),
+    vec3(-3.8 * meter, 0, 7.7 * meter),
+    vec3(3.8 * meter, 0, 7.7 * meter),
+    vec3(3.8 * meter, 0, -7.7 * meter),
+  ])
+
+  const singles_even_bounds: [Vec3, Vec3] = [
+    vec3(0, 0, 1.98 * meter),
+    vec3(2.59 * meter, 0, 6.7 * meter),
+  ]
+
+  const singles_odd_bounds: [Vec3, Vec3] = [
+    vec3(-2.59 * meter, 0, 1.98 * meter),
+    vec3(0, 0, 6.7 * meter),
+  ]
+
+  return {
+    court_lines: court_lines,
+    cam: cam,
+    update: court_update,
+    draw: court_draw,
+    poly: p,
+    singles_even_bounds: singles_even_bounds,
+    singles_odd_bounds: singles_odd_bounds,
+  }
+}
+
+function court_update(c: Court): void {
+  polygon_update(c.poly)
+}
+
+function court_draw(c: Court): void {
+  polygon_draw(c.poly)
+
+  for (let i = 0; i < c.court_lines.length; i++) {
+    const l = c.court_lines[i]
+    line_draw(l, c.cam)
+  }
 }
