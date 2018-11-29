@@ -101,15 +101,31 @@ function vec3(x?: number, y?: number, z?: number): Vec3 {
 }
 
 function vec3_add(out: Vec3, a: Vec3, b: Vec3): void {
-  out.x = a.x + b.x
-  out.y = a.y + b.y
-  out.z = a.z + b.z
+  const ax = a.x
+  const ay = a.y
+  const az = a.z
+
+  const bx = b.x
+  const by = b.y
+  const bz = b.z
+
+  out.x = ax + bx
+  out.y = ay + by
+  out.z = az + bz
 }
 
 function vec3_sub(out: Vec3, a: Vec3, b: Vec3): void {
-  out.x = a.x - b.x
-  out.y = a.y - b.y
-  out.z = a.z - b.z
+  const ax = a.x
+  const ay = a.y
+  const az = a.z
+
+  const bx = b.x
+  const by = b.y
+  const bz = b.z
+
+  out.x = ax - bx
+  out.y = ay - by
+  out.z = az - bz
 }
 
 function vec3_mul(out: Vec3, a: Vec3, b: Vec3): void {
@@ -341,34 +357,100 @@ function insert_into(order: OrderArray, pos: Vec3, a: Actor): void {
   add(order, [pos, a])
 }
 
+type OrderFuncArray = Array<[Vec3, Function]>
+
+function insert_into2(order: OrderFuncArray, pos: Vec3, a: Function): void {
+  for (let i = 0; i < order.length; i++) {
+    const current = order[i]
+    if (pos.z < current[0].z) {
+      // Move everything 1 over.
+      for (let j = order.length - 1; j >= i; j--) {
+        order[j + 1] = order[j]
+      }
+
+      // Insert.
+      order[i] = [pos, a]
+      return
+    }
+  }
+
+  add(order, [pos, a])
+}
+
 /**
  * Reach.
  */
 
 const reach_spare = vec3()
-/** !TupleReturn */
+const reach_spare2 = vec3()
+
 function reach(
   head: Vec3,
   tail: Vec3,
   target: Vec3,
-  head_tail_len: number
-): [Vec3, Vec3] {
-  // stretched vec
-  const tail_to_target = vec3_sub(reach_spare, tail, target)
+  head_tail_len: number,
+  constrain?: boolean // if true, head_tail_len is treated as a max
+): void {
+  // get stretched length
+  vec3_sub(reach_spare, tail, target)
   const stretched_len = vec3_magnitude(reach_spare)
+
+  // avoid division by zero
+  if (stretched_len === 0) {
+    return
+  }
+
+  // constrain head tail length if necessary
+  if (constrain) {
+    const len = vec3_dist(head, tail)
+    head_tail_len = min(head_tail_len, len)
+    head_tail_len = max(head_tail_len, 0.1 * meter)
+  }
 
   // compute scale
   const scale = head_tail_len / stretched_len
 
-  return [
-    { x: target.x, y: target.y, z: target.z },
-    {
-      x: target.x + reach_spare.x * scale,
-      y: target.y + reach_spare.y * scale,
-      z: target.z + reach_spare.z * scale,
-    },
-  ]
+  // set new head
+  vec3_assign(head, target)
+
+  // set new tail
+  vec3_assign(tail, target)
+  vec3_scale(reach_spare, scale)
+  vec3_add(tail, tail, reach_spare)
 }
+
+/*
+function reach2(
+  head: Vec3,
+  tail: Vec3,
+  head_target: Vec3,
+  tail_target: Vec3
+): void {
+  // Get stretched length.
+  vec3_sub(reach_spare, tail_target, head_target)
+  const stretched_len = vec3_magnitude(reach_spare)
+
+  // Avoid division by zero.
+  if (stretched_len === 0) {
+    return
+  }
+
+  // Get `head_tail_len`.
+  vec3_sub(reach_spare2, tail, head)
+  const head_tail_len = vec3_magnitude(reach_spare2)
+
+  // Compute scale.
+  const scale = head_tail_len / stretched_len
+
+  // Set new head.
+  vec3_assign(head, head_target)
+
+  // Set new tail.
+  vec3_assign(tail, head_target)
+  vec3_scale(reach_spare, scale)
+  vec3_add(tail, tail, reach_spare)
+}
+*/
 
 /**
  * Game loop.
@@ -417,6 +499,12 @@ function _init(): void {
 
   const b = ball(c, n)
 
+  b.pos.x = 1.5 * meter
+  b.pos.y = 3.0 * meter
+  b.pos.z = 3 * meter
+
+  b.vel.y = 5 * meter
+
   /**
    * Construct game.
    */
@@ -429,40 +517,14 @@ function _init(): void {
 
   const player_user = player(
     c,
-    b,
     -0.5 * meter,
     0,
     5 * meter,
     player_keyboard_input,
-    vec3(-2.59 * meter, 0, 0.5 * meter),
-    vec3(2.59 * meter, 0, 6.7 * meter),
     -1,
     g,
     true,
-    player_side.left,
-    player_human_swing,
-    player_human_wind_up
-  )
-
-  /**
-   * Construct opponent.
-   */
-
-  const opponent = player(
-    c,
-    b,
-    -0.5 * meter,
-    0,
-    -5 * meter,
-    player_ai,
-    vec3(-2.59 * meter, 0, -6.7 * meter),
-    vec3(2.59 * meter, 0, -0.5 * meter),
-    1,
-    g,
-    false,
-    player_side.right,
-    player_cpu_swing,
-    player_cpu_wind_up
+    player_side.left
   )
 
   /**
@@ -472,16 +534,15 @@ function _init(): void {
   // Ball should come after Players to avoid lag.
   // Game should come first, because it holds
   // current game state.
-  actors = [g, c, n, crt, player_user, opponent, b]
+  actors = [g, c, n, crt, player_user, b]
 
   actors_obj = {
     camera: c,
     net: n,
     court: crt,
-    ball: b,
     game: g,
     player: player_user,
-    opponent: opponent,
+    ball: b,
   }
 }
 
@@ -506,7 +567,6 @@ function _draw(): void {
   const order: OrderArray = []
   insert_into(order, zero_vec, actors_obj.net)
   insert_into(order, (actors_obj.player as Player).pos, actors_obj.player)
-  insert_into(order, (actors_obj.opponent as Player).pos, actors_obj.opponent)
   insert_into(order, (actors_obj.ball as Ball).pos, actors_obj.ball)
 
   /**
@@ -526,6 +586,9 @@ function _draw(): void {
   // Draw game last.
   const game = actors_obj.game
   game.draw(game)
+
+  // print cpu
+  // print(stat(1), 0, 0)
 }
 
 /**
@@ -713,9 +776,9 @@ function cam(): Camera {
   }
 }
 
-function cam_update(c: Camera): void { }
+function cam_update(_c: Camera): void { }
 
-function cam_draw(c: Camera): void { }
+function cam_draw(_c: Camera): void { }
 
 function cam_project(c: Camera, out: Vec3, v: Vec3): void {
   // world to view.
@@ -814,18 +877,19 @@ enum player_side {
  * Assume that all players are righties.
  */
 
-enum PlayerStance {
-  Forehand,
-  Backhand,
+enum player_stance {
+  forehand,
+  backhand,
 }
 
 /**
  * Swing state.
  */
 
-enum SwingState {
-  Idle,
-  Winding,
+enum swing_state {
+  idle,
+  winding,
+  swing,
 }
 
 /**
@@ -835,7 +899,6 @@ enum SwingState {
 interface Player extends Actor {
   // Dependencies.
   cam: Camera
-  ball: Ball // Deprecated.
   game: Game
 
   // Position.
@@ -849,81 +912,75 @@ interface Player extends Actor {
   // Acceleration.
   acc: Vec3
   desired_speed: number
+  desired_speed_lerp_factor: number
   input_method: (p: Player) => void
 
   // Player side.
   //
   // The sides are kinda arbitrary, but are still named
   // "left" and "right".
+  //
+  // For 1 player, the player is on the "left" side.
   player_side: player_side
 
   // Is the player facing the -z, or z direction?
   player_dir: -1 | 1
 
   // Forehand or backhand?
-  player_stance: PlayerStance
+  player_stance: player_stance
 
   // Swing-related properties.
-  swing_state: SwingState
-  wind_up_condition: (p: Player) => boolean
-  swing2_condition: (p: Player) => boolean
-  swing_power: number
+  swing_state: swing_state
+  swing_frames: number // This is kind of like power.
+  swing_power: number // Snapshot of swing_frames when transitioning into swing state.
 
-  // Exploratory.
-  arm_points: [Vec3, Vec3, Vec3]
-  arm_screen_points: [Vec3, Vec3, Vec3]
+  // Arm.
+  arm_points: [Vec3, Vec3, Vec3, Vec3]
+  arm_screen_points: [Vec3, Vec3, Vec3, Vec3]
 
-  // Spare vectors.
-  spare: Vec3
-  up: Vec3
-  player_to_ball: Vec3
+  // Temporary target.
+  target: Vec3
+
+  // Temporary.
+  ball_hit: boolean
 }
 
 function player(
   c: Camera,
-  b: Ball,
   x: number,
   y: number,
   z: number,
   input_method: (p: Player) => void,
-  upper_left_bound: Vec3,
-  lower_right_bound: Vec3,
   player_dir: -1 | 1,
   game: Game,
   is_initial_server: boolean,
   player_side: player_side,
-  swing_condition: (p: Player) => boolean,
-  wind_up_condition: (p: Player) => boolean
 ): Player {
-  const points: [Vec3, Vec3, Vec3] = [vec3(), vec3(), vec3()]
-  const more_points: [Vec3, Vec3, Vec3] = [vec3(), vec3(), vec3()]
+  const points: [Vec3, Vec3, Vec3, Vec3] = [vec3(), vec3(), vec3(), vec3()]
+  const more_points: [Vec3, Vec3, Vec3, Vec3] = [vec3(), vec3(), vec3(), vec3()]
 
-  const p = {
+  const p: Player = {
     pos: vec3(x, y, z),
     vel: vec3(),
     vel60: vec3(),
     acc: vec3(),
-    desired_speed: 10 * meter,
+    desired_speed: 6.5 * meter,
+    desired_speed_lerp_factor: 0.5,
     screen_pos: vec3(),
     cam: c,
-    ball: b,
-    spare: vec3(),
-    up: vec3(0, 1, 0),
-    player_to_ball: vec3(),
-    swing_time: 0,
     input_method: input_method,
     player_dir: player_dir,
-    swing_condition: swing_condition,
     game: game,
     update: player_update,
     draw: player_draw,
     player_side: player_side,
-    player_stance: PlayerStance.Forehand,
-    swing_state: SwingState.Idle,
-    swing2_condition: swing_condition,
-    wind_up_condition: wind_up_condition,
+    player_stance: player_stance.forehand,
+    swing_state: swing_state.idle,
     arm_points: points,
     arm_screen_points: more_points,
+    target: vec3(),
+    swing_frames: 0,
+    ball_hit: false,
     swing_power: 0,
   }
 
@@ -934,110 +991,41 @@ function player(
   return p
 }
 
-function player_human_wind_up(p: Player): boolean {
-  return false
-}
-
-function player_human_swing(p: Player): boolean {
-  return false
-}
-
-function player_cpu_wind_up(p: Player): boolean {
-  return false
-}
-
-function player_cpu_swing(p: Player): boolean {
-  return false
-}
-
-function player_keyboard_input(p: Player): void {
-  if (btn(button.left)) p.acc.x -= p.desired_speed
-  if (btn(button.right)) p.acc.x += p.desired_speed
-  if (btn(button.up)) p.acc.z -= p.desired_speed
-  if (btn(button.down)) p.acc.z += p.desired_speed
-}
-
-function player_ai(p: Player): void {
-  /**
-   * Move in direction of ball.
-   */
-
-  vec3_zero(p.acc)
-
-  /**
-   * Compute `player_to_ball` vector.
-   */
-
-  /**
-   * If ball is in range, swing.
-   */
-}
-
-function player_swing(p: Player): void {
-  // TODO.
-}
-
 function player_move(p: Player): void {
-  /**
-   * Compute acceleration.
-   *
-   * Acceleration here is like "desired velocity".
-   */
+  // Compute acceleration.
 
   vec3_zero(p.acc)
-  // p.input_method(p)
+  p.input_method(p)
 
-  /**
-   * Compute player stance.
-   */
+  // Compute player stance.
 
   if (p.acc.x > 0) {
-    p.player_stance = PlayerStance.Forehand
+    p.player_stance = player_stance.forehand
   }
 
   if (p.acc.x < 0) {
-    p.player_stance = PlayerStance.Backhand
+    p.player_stance = player_stance.backhand
   }
 
-  /**
-   * Normalize & scale acceleration.
-   */
+  // Normalize & scale acceleration.
 
   vec3_normalize(p.acc)
   vec3_scale(p.acc, p.desired_speed)
 
-  /**
-   * Update velocity.
-   */
+  // Update velocity.
 
-  const t = 0.5
-  vec3_lerp(p.vel, p.vel, p.acc, t)
+  vec3_lerp(p.vel, p.vel, p.acc, p.desired_speed_lerp_factor)
 
-  /**
-   * Update position.
-   */
+  // Update position.
 
   vec3_assign(p.vel60, p.vel)
   vec3_scale(p.vel60, 1 / 60)
   vec3_add(p.pos, p.pos, p.vel60)
 
-  /**
-   * Bounds checking.
-   */
+  // Bounds checking.
 
   if (p.game.state === state.pre_serve) {
-    const side = p.player_side
-    let player_score: number
-    let opponent_score: number
-
-    if (side === player_side.left) {
-      player_score = p.game.left_side_score
-      opponent_score = p.game.right_side_score
-    } else {
-      player_score = p.game.right_side_score
-      opponent_score = p.game.left_side_score
-    }
-
+    const [player_score, opponent_score] = get_player_score(p)
     if (p.game.server === p) {
       if (player_score % 2 === 0) {
         player_bounds_check(p, p.game.court.singles_even_bounds)
@@ -1053,11 +1041,167 @@ function player_move(p: Player): void {
     }
   }
 
-  /**
-   * Update screen position.
-   */
+  // Update screen position.
 
   cam_project(p.cam, p.screen_pos, p.pos)
+}
+
+// Spare vectors.
+const chest_spare = vec3()
+const target_spare = vec3()
+const arm_points_spare = vec3()
+
+// Offsets relative to `p.pos`.
+const arm_socket_offset = vec3(0.1722 * meter, 0.9227 * meter, -0.1627 * meter)
+const wrist_offset = vec3(0.5525 * meter, 0.7729 * meter, -0.4026 * meter)
+const racket_head_offset = vec3(0.25 * meter, 0.75 * meter, -1 * meter)
+const chest_offset = vec3(0, 1 * meter, 0)
+const idle_target_offset = vec3(1.15 * meter, 1 * meter, 0)
+
+function player_move_arm(p: Player): void {
+  // References.
+  const ball = p.game.ball.pos
+  const chest = p.arm_points[0]
+  const arm_socket = p.arm_points[1]
+  const wrist = p.arm_points[2]
+  const racket_head = p.arm_points[3]
+
+  // Lengths.
+  const chest_to_arm_socket = 0.25 * meter
+  const arm_socket_to_wrist = 0.75 * meter
+  const wrist_to_racket_head = 0.67 * meter
+
+  // Compute distance between chest and ball.
+  vec3_add(chest_spare, p.pos, chest_offset)
+  const dist_to_ball = vec3_dist(ball, chest_spare) / meter
+  const near_ball = dist_to_ball < 0.5 * meter
+
+  // Constants.
+  const min_swing_frames = -50
+  const max_swing_frames = 40
+  const idle_speed = 5
+  const winding_speed = 5
+  const swing_speed = -20
+  const dist_per_frame = .06 * meter
+  const swing_power_max = 80
+
+  // State transitions.
+  if (p.swing_state === swing_state.idle && btn(button.x)) {
+    p.swing_state = swing_state.winding
+  }
+  if (p.swing_state === swing_state.winding && !btn(button.x)) {
+    p.swing_state = swing_state.swing
+  }
+  if (p.swing_state === swing_state.swing && p.swing_frames === min_swing_frames) {
+    p.swing_state = swing_state.idle
+  }
+
+  // Update swing frames.
+  if (p.swing_state === swing_state.idle) {
+    p.swing_frames = min(p.swing_frames + idle_speed, 0)
+    p.swing_power = 0
+  }
+  if (p.swing_state === swing_state.winding) {
+    p.swing_frames = min(p.swing_frames + winding_speed, max_swing_frames)
+    p.swing_power = min(p.swing_power + 2, swing_power_max)
+  }
+  if (p.swing_state === swing_state.swing) {
+    p.swing_frames = max(p.swing_frames + swing_speed, min_swing_frames)
+  }
+
+  if (near_ball || (p.swing_state !== swing_state.idle || p.swing_frames !== 0)) {
+    // Then reach for the ball, keeping in mind the offset for swing frames.
+
+    // Remember to not alter `ball` vector.
+    if (near_ball) {
+      // Target is ball.
+      vec3_assign(target_spare, ball)
+
+      // Convert target to local space.
+      vec3_sub(target_spare, target_spare, p.pos)
+    } else {
+      // Target is "idle target offset", which is already in local space.
+      vec3_assign(target_spare, idle_target_offset)
+    }
+
+    // Offset target.
+    target_spare.z += -p.player_dir * dist_per_frame * p.swing_frames
+
+    // Lerp from racket_head to target.
+    vec3_lerp(target_spare, racket_head, target_spare, 0.2)
+
+    // Reach for target.
+    reach(racket_head, wrist, target_spare, wrist_to_racket_head)
+    reach(wrist, arm_socket, wrist, arm_socket_to_wrist, true)
+    reach(arm_socket, chest, arm_socket, chest_to_arm_socket)
+
+    // Reverse reach for chest anchor.
+    reach(chest, arm_socket, chest_offset, chest_to_arm_socket)
+    reach(arm_socket, wrist, arm_socket, arm_socket_to_wrist, true)
+    reach(wrist, racket_head, wrist, wrist_to_racket_head)
+
+    // If we hit the ball (roughly speaking), affect the ball state.
+    vec3_add(chest_spare, p.pos, racket_head)
+    const ball_hit = vec3_dist(chest_spare, ball) < 0.5 * meter
+    if (ball_hit && p.swing_state === swing_state.swing) {
+      p.game.ball.vel.z = p.player_dir * abs(p.swing_power) * meter
+    }
+  } else {
+    // Then lerp towards idle configuration, keeping in mind the offset for swing frames.
+
+    // Move arm_socket.
+    vec3_lerp(arm_socket, arm_socket, arm_socket_offset, 0.2)
+
+    // Move wrist.
+    vec3_lerp(wrist, wrist, wrist_offset, 0.2)
+
+    // Move racket_head.
+    vec3_lerp(racket_head, racket_head, racket_head_offset, 0.2)
+
+    // The dist between wrist and racket_head
+    // isn't necessarily constant here, but it's
+    // fine for the purposes of this animation.
+  }
+
+  // Update screen coordinates.
+  // Remember to convert arm_points into world space first!
+  const len = p.arm_points.length
+  for (let i = 0; i < len; i++) {
+    vec3_add(arm_points_spare, p.pos, p.arm_points[i])
+    cam_project(p.cam, p.arm_screen_points[i], arm_points_spare)
+  }
+}
+
+function player_keyboard_input(p: Player): void {
+  if (btn(button.left)) p.acc.x -= p.desired_speed
+  if (btn(button.right)) p.acc.x += p.desired_speed
+  if (btn(button.up)) p.acc.z -= p.desired_speed
+  if (btn(button.down)) p.acc.z += p.desired_speed
+}
+
+// Return [player score, opponent score].
+/** !TupleReturn */
+function get_player_score(p: Player): [number, number] {
+  const side = p.player_side
+  let player_score: number
+  let opponent_score: number
+  if (side === player_side.left) {
+    player_score = p.game.left_side_score
+    opponent_score = p.game.right_side_score
+  } else {
+    player_score = p.game.right_side_score
+    opponent_score = p.game.left_side_score
+  }
+  return [player_score, opponent_score]
+}
+
+function player_ai(p: Player): void {
+  // Move in direction of ball.
+  vec3_zero(p.acc)
+
+  // Compute `player_to_ball` vector.
+
+  // If ball is in range, swing.
 }
 
 function player_bounds_check(p: Player, bounds: [Vec3, Vec3]): void {
@@ -1101,140 +1245,59 @@ function player_move_ball(p: Player): void {
    * Place ball on player's forehand or backhand side.
    */
 
-  if (p.player_stance === PlayerStance.Forehand) {
+  if (p.player_stance === player_stance.forehand) {
     p.game.ball.pos.x += 0.5 * meter
   }
 
-  if (p.player_stance === PlayerStance.Backhand) {
+  if (p.player_stance === player_stance.backhand) {
     p.game.ball.pos.x -= 0.5 * meter
   }
 
   p.game.ball.pos.z += p.player_dir * 0.1 * meter
 }
 
+function player_pre_serve(p: Player): void {
+  /*
+  if (btn(button.left)) {
+    p.target.x -= 0.3
+  }
+  if (btn(button.right)) {
+    p.target.x += 0.3
+  }
+  if (btn(button.up)) {
+    p.target.y += 0.3
+  }
+  if (btn(button.down)) {
+    p.target.y -= 0.3
+  }
+  if (btn(button.z)) {
+    p.target.z -= 0.3
+  }
+  if (btn(button.x)) {
+    p.target.z += 0.3
+  }
+  */
+
+  // Move player.
+  player_move(p)
+
+  // Move the arm.
+  player_move_arm(p)
+}
+
 function player_update(p: Player): void {
-  /**
-   * Prior to serve.
-   */
-
   if (p.game.state === state.pre_serve) {
-    // TODO: temporary, move ball around using arrow keys and z and x
-    if (p.game.server === p) {
-      const racket_head = p.arm_points[2]
-      if (btn(button.up)) {
-        racket_head.y += 0.05 * meter
-      }
-      if (btn(button.down)) {
-        racket_head.y -= 0.05 * meter
-      }
-      if (btn(button.left)) {
-        racket_head.x -= 0.05 * meter
-      }
-      if (btn(button.right)) {
-        racket_head.x += 0.05 * meter
-      }
-      if (btn(button.z)) {
-        racket_head.z -= 0.05 * meter
-      }
-      if (btn(button.x)) {
-        racket_head.z += 0.05 * meter
-      }
-      cam_project(p.cam, p.arm_screen_points[2], racket_head)
-
-      const socket = p.arm_screen_points[0]
-      const wrist = p.arm_screen_points[1]
-      // const racket_head = p.arm_screen_points[2]
-
-      let target = racket_head
-      const spare = vec3()
-
-      vec3_sub(spare, racket_head, socket)
-      let [new_head, new_tail] = reach(racket_head, wrist, target, 0.5 * meter)
-      p.arm_points[0] = new_head
-      target = new_tail
-
-      vec3_sub(spare, wrist, socket)
-      let [new_head2, new_tail2] = reach(wrist, socket, wrist, 0.5 * meter)
-      p.arm_points[1] = new_head2
-      target = new_tail2
-
-      p.arm_points[2] = socket
-
-      // update screen points.
-      for (let i = 0; i < 3; i++) {
-        cam_project(p.cam, p.arm_screen_points[i], p.arm_points[i])
-      }
-
-      //print('processed input')
-      //stop()
-      return
-    }
-
-    return
-
-    if (btn(button.x)) {
-      // Make ball be affected by gravity again.
-      p.game.ball.is_kinematic = false
-
-      // Set next state.
-      p.game.next_state = state.serving
-    }
-
-    if (btn(button.z) && p.player_stance === PlayerStance.Backhand) {
-      // Make ball be affected by gravity again.
-      p.game.ball.is_kinematic = false
-
-      // Set next state.
-      p.game.next_state = state.serving
-
-      // Set swing state.
-      p.swing_state = SwingState.Winding
-    }
-
-    player_move(p)
-    if (p.game.server === p) {
-      player_move_ball(p)
-    }
-    // Move arm afterward, since it depends
-    // on ball's location.
-    player_move_arm(p)
-
+    player_pre_serve(p)
     return
   }
-
-  /**
-   * Serve.
-   */
 
   if (p.game.state === state.serving) {
-    // If we are in a winding state,
-    // increase swing power.
-    // Remember to reset serve power later!
-    if (p.swing_state === SwingState.Winding && btn(button.z)) {
-      p.swing_power += 1 * (1 / 60)
-      return
-    }
-
-    if (p.swing_state === SwingState.Winding && !btn(button.z)) {
-      p.swing_state = SwingState.Idle
-      return
-      // TODO: Swing.
-    }
-
     return
   }
-
-  /**
-   * Rally.
-   */
 
   if (p.game.state === state.rally) {
     return
   }
-
-  /**
-   * Post-rally.
-   */
 
   if (p.game.state === state.post_rally) {
     return
@@ -1243,56 +1306,88 @@ function player_update(p: Player): void {
   return
 }
 
-function player_move_arm(p: Player): void {
-  // Update socket point.
-  const socket = p.arm_points[0]
-  socket.x = p.pos.x + 0.3 * meter * -p.player_dir
-  socket.y = p.pos.y + 1 * meter
-  socket.z = p.pos.z
-
-  // Update racket head point.
-  const racket_head = p.arm_points[2]
-  racket_head.x = p.ball.pos.x
-  racket_head.y = p.ball.pos.y
-  racket_head.z = p.ball.pos.z
-
-  // Update screen points.
-  cam_project(p.cam, p.arm_screen_points[0], socket)
-  cam_project(p.cam, p.arm_screen_points[2], racket_head)
-}
-
 function player_draw(p: Player): void {
+
+  /**
+   * Constants.
+   */
+
   const width = 10
   const height = 25
-  const arm_height = 15
 
-  // Draw shadow.
-  circfill(round(p.screen_pos.x), round(p.screen_pos.y), 3, col.dark_blue)
+  /**
+   * Unsorted.
+   */
 
-  // Draw player.
-  rectfill(
-    round(p.screen_pos.x - width / 2),
-    round(p.screen_pos.y - height),
-    round(p.screen_pos.x + width / 2),
-    round(p.screen_pos.y),
-    col.orange
-  )
+  // Declare some spare vectors.
+  const screen = vec3()
+  const target = vec3()
 
-  //
-  // Draw player arm.
-  //
+  /**
+   * Sorted.
+   */
 
-  // Socket.
-  const socket = p.arm_screen_points[0]
-  circfill(socket.x, socket.y, 1, col.orange)
+  // Declare vars for arm joints.
+  const chest = p.arm_screen_points[0]
+  const socket = p.arm_screen_points[1]
+  const hand = p.arm_screen_points[2]
+  const racket_head = p.arm_screen_points[3]
 
-  // Wrist.
-  const wrist = p.arm_screen_points[1]
-  circfill(wrist.x, wrist.y, 1, col.peach)
+  // Do z-sorting.
+  const orderArray: OrderFuncArray = []
 
-  // Racket head.
-  const racket_head = p.arm_screen_points[2]
-  circfill(racket_head.x, racket_head.y, 1, col.pink)
+  // Chest insert.
+  insert_into2(orderArray, chest, function (): void {
+    // Draw shadow.
+    circfill(round(p.screen_pos.x), round(p.screen_pos.y), 3, col.dark_blue)
+
+    // Draw player.
+    rectfill(
+      round(p.screen_pos.x - width / 2),
+      round(p.screen_pos.y - height),
+      round(p.screen_pos.x + width / 2),
+      round(p.screen_pos.y),
+      col.orange
+    )
+  })
+
+  // Socket insert.
+  insert_into2(orderArray, socket, function (): void {
+    // circfill(socket.x, socket.y, 1, col.peach)
+    line(socket.x, socket.y, hand.x, hand.y, col.peach)
+  })
+
+  // Hand insert.
+  insert_into2(orderArray, hand, function (): void {
+    circfill(hand.x, hand.y, 1, col.peach)
+    line(hand.x, hand.y, racket_head.x, racket_head.y, col.red)
+  })
+
+  // Racket head insert.
+  insert_into2(orderArray, racket_head, function (): void {
+    // Find shadow position in world space.
+    vec3_add(target, p.pos, chest_offset)
+    vec3_add(target, target, p.arm_points[3])
+    target.y = 0
+
+    // Find screen space coordinates.
+    cam_project(p.cam, screen, target)
+
+    // Draw shadow.
+    circfill(screen.x, screen.y, 2, col.dark_blue)
+
+    // Draw racket head.
+    circfill(racket_head.x, racket_head.y, 3, col.white)
+  })
+
+  // Draw ordered player body parts.
+  for (let i = 0; i < orderArray.length; i++) {
+    orderArray[i][1]()
+  }
+
+  // Debug.
+  // print(p.swing_power)
+  // print(p.swing_state)
 }
 
 /**
@@ -1308,10 +1403,11 @@ interface Ball extends Actor {
 
   // Velocity.
   vel: Vec3
-  vel60: Vec3
 
   // Acceleration.
   acc: Vec3
+  // Drag.
+  drag: Vec3
 
   // Dependencies.
   cam: Camera
@@ -1323,6 +1419,7 @@ interface Ball extends Actor {
   // Spare vec3's for computation.
   spare: Vec3
   next_pos: Vec3
+  spare2: Vec3
 }
 
 function ball(c: Camera, n: Net): Ball {
@@ -1330,8 +1427,8 @@ function ball(c: Camera, n: Net): Ball {
     pos: vec3(0, 3 * meter, 5 * meter),
     shadow_pos: vec3(),
     vel: vec3(0, 1 * meter, 0),
-    vel60: vec3(),
     acc: vec3(0, -10 * meter, 0),
+    drag: vec3(0, 0, 0),
     screen_pos: vec3(),
     screen_shadow_pos: vec3(),
     cam: c,
@@ -1340,14 +1437,28 @@ function ball(c: Camera, n: Net): Ball {
     update: ball_update,
     draw: ball_draw,
     spare: vec3(),
+    spare2: vec3(),
     next_pos: vec3(),
   }
 }
 
 function ball_update(b: Ball): void {
   if (!b.is_kinematic && b.pos.y > 0) {
+    // Store velocity in spare. Normalize.
+    vec3_assign(b.spare2, b.vel)
+    vec3_normalize(b.spare2)
+
+    // Compute drag force for this frame. Note that we don't divide by 60, rather we use a constant.
+    // TODO: This might overflow.
+    let speed = vec3_magnitude(b.vel)
+    const c = 0.01
+    speed = c * speed * speed
+    vec3_scale(b.spare2, -speed)
+
+    // Combine forces.
     // Compute change in velocity for this frame.
-    vec3_assign(b.spare, b.acc)
+    vec3_add(b.spare, b.acc, b.spare2)
+    // vec3_assign(b.spare, b.acc)
     vec3_scale(b.spare, 1 / 60)
 
     // Apply change in velocity.
@@ -1417,7 +1528,9 @@ function ball_draw(b: Ball): void {
   )
 
   // draw ball
-  circfill(round(b.screen_pos.x), round(b.screen_pos.y), 1, col.yellow)
+  circfill(round(b.screen_pos.x), round(b.screen_pos.y), 2, col.green)
+
+  // vec3_print(b.vel)
 }
 
 /**
@@ -1446,7 +1559,7 @@ function net(lines: Array<line>, cam: Camera): Net {
   }
 }
 
-function net_update(n: Net): void { }
+function net_update(_n: Net): void { }
 
 function net_draw(n: Net): void {
   for (let i = 0; i < n.lines.length; i++) {

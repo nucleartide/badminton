@@ -155,6 +155,7 @@ declare function ceil(x: number): number
 declare function sqrt(x: number): number
 declare function cos(x: number): number
 declare function sin(x: number): number
+declare function abs(x: number): number
 
 /**
  * Custom menu items.
@@ -167,6 +168,8 @@ declare function sin(x: number): number
 /**
  * Types.
  */
+
+declare function tostr(val: boolean): string
 
 /**
  * Cartridge data.
